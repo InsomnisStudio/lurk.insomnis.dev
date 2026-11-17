@@ -1,0 +1,442 @@
+---
+// A customer's account, with the API key: the subscription as Stripe has it (status,
+// next charge or end), a one-time link straight into Stripe's portal, and adding or
+// removing platforms (Stripe's portal cannot, with several products). Without the key,
+// the portal's own email sign-in.
+import Base from '../layouts/Base.astro';
+import { API_HTTP, PLATFORMS, PORTAL_URL } from '../config';
+import { t, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+}
+
+const { lang } = Astro.props;
+const c = t[lang];
+const a = c.account;
+const [page, otherPage] = lang === 'es' ? ['cuenta', 'account'] : ['account', 'cuenta'];
+const names = Object.fromEntries(PLATFORMS.map((p) => [p.id, p.name]));
+---
+
+<Base lang={lang} title={a.title} description={a.sub} page={page} otherPage={otherPage} current="account" noindex>
+	<section class="hero">
+		<div
+			class="wrap"
+			data-account
+			data-lang={lang}
+			data-api={API_HTTP}
+			data-names={JSON.stringify(names)}
+			data-statuses={JSON.stringify(a.status)}
+			data-errors={JSON.stringify(a.errors)}
+			data-saved={a.saved}
+			data-label-change={a.change}
+			data-label-close={a.close}
+			data-label-save={a.save}
+			data-label-cancel={a.cancel}
+			data-cancel-note={a.cancelNote('{until}')}
+			data-cancel-note-open={a.cancelNote(null)}
+		>
+			<h1>{a.h1}</h1>
+
+			<form class="key-form" data-load>
+				<label for="key">{a.keyLabel}</label>
+				<div class="key-row">
+					<input id="key" name="key" type="password" autocomplete="off" spellcheck="false" placeholder="lurk_…" required />
+					<button type="submit" class="btn">{a.load}</button>
+				</div>
+				{
+					PORTAL_URL && (
+						<p class="muted note">
+							{a.noKey} <a href={PORTAL_URL}>{a.noKeyCta} →</a>
+						</p>
+					)
+				}
+			</form>
+			<p class="account-message" data-message role="status" aria-live="polite"></p>
+
+			<div data-signed-in hidden>
+				<table class="kv account-kv">
+					<tbody>
+						<tr>
+							<td>{a.rows.key}</td>
+							<td>
+								<code data-key-prefix></code>
+								<span class="muted">{' · '}</span>
+								<button type="button" class="link" data-other-key>{a.otherKey}</button>
+							</td>
+						</tr>
+						<tr>
+							<td>{a.rows.status}</td>
+							<td><span class="dot" data-dot>●</span> <span data-status></span></td>
+						</tr>
+						<tr>
+							<td>{a.rows.platforms}</td>
+							<td>
+								<span data-what></span>
+								<span class="muted">{' · '}</span>
+								<button type="button" class="link" data-edit aria-expanded="false" aria-controls="platform-editor">{a.change}</button>
+							</td>
+						</tr>
+						<tr class="editor-row" data-editor hidden>
+							<td colspan="2">
+								<form id="platform-editor" data-change-form>
+									<div class="picks">
+										{
+											PLATFORMS.map((p) => (
+												<label class={`pick p-${p.id}`}>
+													<input type="checkbox" name="platform" value={p.id} data-price={p.price} />
+													<span class="pick-name">{p.name}</span>
+													<span class="pick-price">
+														{p.price}€<small>{c.pricing.month}</small>
+													</span>
+												</label>
+											))
+										}
+									</div>
+									<div class="change-bar">
+										<div>
+											<p class="change-sum" data-sum>
+												<span data-before></span><span data-arrow hidden> → <strong data-after></strong></span>
+												<small class="muted">{c.pricing.month} {a.vat}</small>
+											</p>
+											<p class="muted note" data-proration hidden>{a.proration}</p>
+											<p class="muted note" data-cancel-text hidden></p>
+										</div>
+										<button type="submit" class="btn" data-save disabled>{a.save}</button>
+									</div>
+								</form>
+							</td>
+						</tr>
+						<tr data-monthly-row>
+							<td>{a.rows.monthly}</td>
+							<td><span data-monthly></span> {a.vat}</td>
+						</tr>
+						<tr data-next-row>
+							<td>{a.rows.next}</td>
+							<td data-next></td>
+						</tr>
+						<tr data-ends-row>
+							<td>{a.rows.ends}</td>
+							<td data-ends></td>
+						</tr>
+					</tbody>
+				</table>
+				<p class="account-message" data-save-message role="status" aria-live="polite"></p>
+				<p class="portal-line">
+					<button type="button" class="link" data-portal>{a.portal} →</button>
+				</p>
+			</div>
+		</div>
+	</section>
+</Base>
+
+<style>
+	/* The flex layouts below would otherwise show what is hidden. */
+	[hidden] {
+		display: none !important;
+	}
+	.key-form {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin-top: 24px;
+		max-width: 640px;
+	}
+	.key-form label {
+		font-size: 14px;
+		color: var(--muted);
+	}
+	.key-form p {
+		margin: 0;
+	}
+	.key-row {
+		display: flex;
+		gap: 12px;
+	}
+	.key-row input {
+		flex: 1;
+		min-width: 0;
+		font: inherit;
+		font-size: 14px;
+		padding: 10px 12px;
+		background: var(--bg-2);
+		color: var(--fg);
+		border: 1px solid var(--line);
+		border-radius: 2px;
+	}
+	.key-row input:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+	/* Buttons that read as links: the actions here are in the text, like the rest. */
+	.link {
+		font: inherit;
+		background: none;
+		border: 0;
+		padding: 0;
+		color: var(--fg);
+		text-decoration: underline;
+		text-decoration-color: var(--dim);
+		text-underline-offset: 3px;
+		cursor: pointer;
+	}
+	.link:hover {
+		color: var(--accent);
+		text-decoration-color: var(--accent);
+	}
+	.link:disabled {
+		opacity: 0.5;
+		cursor: wait;
+	}
+	.account-kv {
+		max-width: 640px;
+		margin-top: 0;
+	}
+	[data-signed-in] {
+		margin-top: 32px;
+	}
+	/* The editor opens inside the table, under the platforms it changes. */
+	.account-kv .editor-row td {
+		color: var(--fg);
+		white-space: normal;
+		padding: 16px 0 20px;
+	}
+	.editor-row .picks {
+		grid-template-columns: repeat(2, 1fr);
+	}
+	.btn.danger {
+		background: transparent;
+		color: #f87171;
+		border-color: #f87171;
+	}
+	.btn.danger:hover {
+		background: #f87171;
+		color: var(--bg);
+	}
+	.account-kv td:last-child {
+		color: var(--fg);
+	}
+	.dot {
+		color: var(--muted);
+	}
+	.dot.ok {
+		color: var(--accent);
+	}
+	.dot.bad {
+		color: #f87171;
+	}
+	.portal-line {
+		margin: 20px 0 0;
+		font-size: 14px;
+	}
+	.change-bar .btn {
+		white-space: nowrap;
+	}
+	.change-bar {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 24px;
+		margin-top: 20px;
+	}
+	.change-bar p {
+		margin: 0 0 6px;
+	}
+	.change-sum {
+		font-size: 18px;
+		font-weight: 600;
+	}
+	.change-sum small {
+		font-size: 13px;
+		font-weight: 400;
+	}
+	.account-message {
+		min-height: 1.5em;
+		margin: 16px 0 0;
+		font-size: 14px;
+	}
+	/* Takes no room until there is something to say. */
+	.account-message:empty {
+		display: none;
+	}
+	.account-message.error {
+		color: #f87171;
+	}
+	.account-message.ok {
+		color: var(--accent);
+	}
+	@media (max-width: 760px) {
+		.editor-row .picks {
+			grid-template-columns: 1fr;
+		}
+		.key-row,
+		.change-bar {
+			flex-direction: column;
+			align-items: stretch;
+		}
+	}
+</style>
+
+<script>
+	type Summary = {
+		platforms: string[];
+		status: string | null;
+		monthly: { amount: number; currency: string } | null;
+		next_charge_at: number | null;
+		ends_at: number | null;
+	};
+
+	const root = document.querySelector<HTMLElement>('[data-account]')!;
+	const d = root.dataset;
+	const lang = d.lang!;
+	const api = d.api!;
+	const names: Record<string, string> = JSON.parse(d.names!);
+	const statuses: Record<string, string> = JSON.parse(d.statuses!);
+	const errors: Record<string, string> = JSON.parse(d.errors!);
+	const $ = <T extends HTMLElement = HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+
+	const load = $<HTMLFormElement>('[data-load]');
+	const keyInput = load.querySelector<HTMLInputElement>('input')!;
+	const signedIn = $('[data-signed-in]');
+	const editor = $('[data-editor]');
+	const edit = $<HTMLButtonElement>('[data-edit]');
+	const change = $<HTMLFormElement>('[data-change-form]');
+	const boxes = [...change.querySelectorAll<HTMLInputElement>('input[name="platform"]')];
+	const save = $<HTMLButtonElement>('[data-save]');
+	const portal = $<HTMLButtonElement>('[data-portal]');
+	const message = $('[data-message]');
+	const saveMessage = $('[data-save-message]');
+	let current: string[] = [];
+	let paidUntil: number | null = null;
+
+	const sum = (ids: string[]) => boxes.filter((b) => ids.includes(b.value)).reduce((s, b) => s + Number(b.dataset.price), 0);
+	const ticked = () => boxes.filter((b) => b.checked).map((b) => b.value);
+	const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+	const date = (secs: number) => new Intl.DateTimeFormat(lang, { dateStyle: 'long' }).format(new Date(secs * 1000));
+	// Euros as the prices are written everywhere else ("88€"); cents only when there are.
+	const money = (m: { amount: number; currency: string }) => {
+		const value = m.amount / 100;
+		const n = m.amount % 100 === 0 ? String(value) : value.toLocaleString(lang, { minimumFractionDigits: 2 });
+		return m.currency.toLowerCase() === 'eur' ? `${n}€` : `${n} ${m.currency.toUpperCase()}`;
+	};
+
+	function say(text: string, kind: 'ok' | 'error' | '' = '', where = message) {
+		where.textContent = text;
+		where.className = `account-message ${kind}`;
+	}
+
+	/// The editor's total and button follow the ticks. With none ticked, the button
+	/// cancels instead: in Stripe, which confirms it.
+	function update() {
+		const on = ticked();
+		const changed = !same(on, current);
+		const cancelling = on.length === 0;
+		$('[data-before]').textContent = `${sum(current)}€`;
+		$('[data-after]').textContent = `${sum(on)}€`;
+		$('[data-sum]').hidden = cancelling;
+		$('[data-arrow]').hidden = !changed;
+		$('[data-proration]').hidden = !changed || cancelling;
+		const note = $('[data-cancel-text]');
+		note.hidden = !cancelling;
+		note.textContent = paidUntil ? d.cancelNote!.replace('{until}', date(paidUntil)) : d.cancelNoteOpen!;
+		save.textContent = cancelling ? d.labelCancel! : d.labelSave!;
+		save.classList.toggle('danger', cancelling);
+		save.disabled = !changed;
+	}
+
+	function openEditor(open: boolean) {
+		editor.hidden = !open;
+		edit.textContent = open ? d.labelClose! : d.labelChange!;
+		edit.setAttribute('aria-expanded', String(open));
+		// Closed means nothing changed: back to what is paid for.
+		boxes.forEach((b) => (b.checked = current.includes(b.value)));
+		update();
+	}
+
+	function show(s: Summary) {
+		current = s.platforms;
+		paidUntil = s.next_charge_at;
+		const status = s.status ?? 'active';
+		$('[data-status]').textContent = statuses[status] ?? status;
+		$('[data-dot]').className = `dot ${['active', 'trialing'].includes(status) ? 'ok' : ['past_due', 'unpaid'].includes(status) ? 'bad' : ''}`;
+		$('[data-what]').textContent = s.platforms.map((p) => names[p] ?? p).join(' + ');
+		$('[data-monthly-row]').hidden = !s.monthly;
+		if (s.monthly) $('[data-monthly]').textContent = money(s.monthly);
+		$('[data-next-row]').hidden = !s.next_charge_at;
+		if (s.next_charge_at) $('[data-next]').textContent = date(s.next_charge_at);
+		$('[data-ends-row]').hidden = !s.ends_at;
+		if (s.ends_at) $('[data-ends]').textContent = date(s.ends_at);
+		$('[data-key-prefix]').textContent = `${keyInput.value.trim().slice(0, 9)}…`;
+
+		openEditor(false);
+		signedIn.hidden = false;
+		load.hidden = true;
+	}
+
+	async function call(method: 'GET' | 'POST', path: string, body?: unknown) {
+		const res = await fetch(`${api}${path}`, {
+			method,
+			headers: {
+				Authorization: `Bearer ${keyInput.value.trim()}`,
+				...(body ? { 'Content-Type': 'application/json' } : {}),
+			},
+			body: body ? JSON.stringify(body) : undefined,
+		});
+		if (!res.ok) throw new Error(errors[res.status] ?? errors.other);
+		return res.json();
+	}
+
+	/// Into Stripe's portal as this customer; `cancel` opens it on cancelling.
+	async function toPortal(button: HTMLButtonElement, cancel = false) {
+		button.disabled = true;
+		try {
+			const { url } = await call('POST', `/v1/subscription/portal?lang=${lang}${cancel ? '&flow=cancel' : ''}`);
+			location.href = url;
+		} catch (err) {
+			say((err as Error).message || errors.other, 'error', saveMessage);
+			button.disabled = false;
+		}
+	}
+
+	load.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		say('');
+		try {
+			show(await call('GET', '/v1/subscription'));
+		} catch (err) {
+			say((err as Error).message || errors.other, 'error');
+		}
+	});
+
+	$('[data-other-key]').addEventListener('click', () => {
+		signedIn.hidden = true;
+		load.hidden = false;
+		keyInput.value = '';
+		keyInput.focus();
+		say('');
+		say('', '', saveMessage);
+	});
+
+	edit.addEventListener('click', () => {
+		say('', '', saveMessage);
+		openEditor(editor.hidden);
+	});
+	portal.addEventListener('click', () => toPortal(portal));
+	boxes.forEach((b) => b.addEventListener('change', update));
+
+	change.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		const on = ticked();
+		if (same(on, current)) return;
+		if (on.length === 0) return toPortal(save, true);
+		save.disabled = true;
+		say('', '', saveMessage);
+		try {
+			show(await call('POST', '/v1/subscription', { platforms: on }));
+			say(d.saved!, 'ok', saveMessage);
+		} catch (err) {
+			say((err as Error).message || errors.other, 'error', saveMessage);
+			update();
+		}
+	});
+</script>

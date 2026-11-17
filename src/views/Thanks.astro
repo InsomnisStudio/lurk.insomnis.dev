@@ -1,0 +1,163 @@
+---
+// Where Stripe Checkout returns after paying, with ?session_id=. The page asks the gateway
+// for the key once, with the nonce this tab sent to checkout; the email has it anyway.
+import Base from '../layouts/Base.astro';
+import CodeTabs from '../components/CodeTabs.astro';
+import { API_HTTP, CONTACT_EMAIL, WS_URL } from '../config';
+import { streamUrl } from '../examples';
+import { t, path, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+}
+
+const { lang } = Astro.props;
+const c = t[lang];
+const th = c.thanks;
+const [page, otherPage] = lang === 'es' ? ['gracias', 'thanks'] : ['thanks', 'gracias'];
+---
+
+<Base lang={lang} title={th.title} description={th.sub} page={page} otherPage={otherPage} noindex>
+	{/* The session id is in this page's URL: never send it on to another site. */}
+	<meta slot="head" name="referrer" content="no-referrer" />
+	<section class="hero">
+		<div
+			class="wrap thanks"
+			data-thanks
+			data-api={API_HTTP}
+			data-shown-sub={th.shownSub}
+			data-sample-url={streamUrl('vinted,wallapop')}
+			data-feed-url={WS_URL}
+		>
+			<h1>{th.h1}</h1>
+			<p class="sub" data-sub>{th.sub}</p>
+			<p class="muted waiting" data-waiting hidden>{th.waiting}</p>
+
+			<div class="reveal" data-reveal hidden>
+				<h2>{th.keyHead}</h2>
+				<div class="built key-box">
+					<code data-key></code>
+					<button type="button" class="copy" data-copy-key data-done={c.code.copied}>{c.code.copy}</button>
+				</div>
+				<p class="muted note">{th.keyNote}</p>
+				<h2>{th.tryHead}</h2>
+				<p class="muted">{th.tryText}</p>
+				<CodeTabs lang={lang} />
+			</div>
+
+			<div data-fallback>
+				<p class="muted">
+					{th.spam} <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+				</p>
+				<p class="muted">{th.next}</p>
+			</div>
+			<div class="actions">
+				<a class="btn" href={path(lang, 'docs')}>{c.home.ctaSecondary}</a>
+				<a class="btn ghost" href={path(lang)}>lurk</a>
+			</div>
+		</div>
+	</section>
+</Base>
+
+<style>
+	.thanks h2 {
+		margin: 40px 0 12px;
+	}
+	.key-box {
+		max-width: 640px;
+	}
+	.key-box code {
+		color: var(--accent);
+		word-break: break-all;
+	}
+	.waiting {
+		margin-top: 0;
+	}
+	.reveal :global(.tabs) {
+		margin-top: 16px;
+	}
+	[data-fallback],
+	.reveal {
+		margin-bottom: 32px;
+	}
+</style>
+
+<script>
+	const NONCE_KEY = 'lurk-checkout-nonce';
+	const TRIES = 20;
+	const EVERY_MS = 1500;
+
+	const root = document.querySelector<HTMLElement>('[data-thanks]')!;
+	const waiting = root.querySelector<HTMLElement>('[data-waiting]')!;
+
+	/// Swaps text inside the highlighted examples; Shiki keeps a string literal in one text
+	/// node, so the highlighting stays.
+	function rewrite(from: string, to: string) {
+		root.querySelectorAll('[data-tabs] pre').forEach((pre) => {
+			const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+			for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+				if (node.nodeValue?.includes(from)) node.nodeValue = node.nodeValue.split(from).join(to);
+			}
+		});
+	}
+
+	function show(key: string) {
+		root.querySelector<HTMLElement>('[data-sub]')!.textContent = root.dataset.shownSub!;
+		root.querySelector<HTMLElement>('[data-key]')!.textContent = key;
+		root.querySelector<HTMLElement>('[data-fallback]')!.hidden = true;
+		rewrite(root.dataset.sampleUrl!, root.dataset.feedUrl!);
+		rewrite('YOUR_API_KEY', key);
+		root.querySelector<HTMLElement>('[data-reveal]')!.hidden = false;
+
+		const copy = root.querySelector<HTMLButtonElement>('[data-copy-key]')!;
+		const label = copy.textContent;
+		copy.addEventListener('click', async () => {
+			try {
+				await navigator.clipboard.writeText(key);
+				copy.textContent = copy.dataset.done!;
+				setTimeout(() => (copy.textContent = label), 1500);
+			} catch {}
+		});
+	}
+
+	async function run() {
+		const session = new URLSearchParams(location.search).get('session_id');
+		if (!session) return;
+		// Out of the address bar, history and bookmarks at once.
+		history.replaceState(null, '', location.pathname);
+		let nonce: string | null = null;
+		try {
+			nonce = sessionStorage.getItem(NONCE_KEY);
+		} catch {}
+		if (!nonce) return;
+
+		const forget = () => {
+			try {
+				sessionStorage.removeItem(NONCE_KEY);
+			} catch {}
+		};
+		waiting.hidden = false;
+		for (let i = 0; i < TRIES; i++) {
+			try {
+				const res = await fetch(`${root.dataset.api}/v1/checkout/key`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ session, nonce }),
+				});
+				if (res.status === 200) {
+					const { key } = await res.json();
+					forget();
+					waiting.hidden = true;
+					return show(key);
+				}
+				// Anything but "not yet": the email is the way.
+				if (res.status !== 202) break;
+			} catch {}
+			await new Promise((r) => setTimeout(r, EVERY_MS));
+		}
+		forget();
+		waiting.hidden = true;
+	}
+
+	run();
+</script>

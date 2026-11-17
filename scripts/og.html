@@ -1,0 +1,151 @@
+<!doctype html>
+<!--
+  The link preview card (1200x630) for Discord, Telegram, X, WhatsApp… Regenerate after
+  changing the copy:
+    chromium --headless=new --hide-scrollbars --window-size=1200,630 \
+      --screenshot=public/og-es.png "file://$PWD/scripts/og.html?lang=es"
+  (and the same with lang=en into public/og-en.png).
+-->
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<style>
+			@font-face {
+				font-family: 'JetBrains Mono';
+				font-weight: 400;
+				src: url('../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+			}
+			@font-face {
+				font-family: 'JetBrains Mono';
+				font-weight: 700;
+				src: url('../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2') format('woff2');
+			}
+			:root {
+				--bg: #0b0b0b;
+				--bg-2: #121212;
+				--line: #222;
+				--fg: #e6e6e6;
+				--muted: #8a8a8a;
+				--dim: #555;
+				--accent: #3ddc84;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				width: 1200px;
+				height: 630px;
+				background: var(--bg);
+				color: var(--fg);
+				font-family: 'JetBrains Mono', monospace;
+				overflow: hidden;
+			}
+			.card {
+				height: 100%;
+				padding: 64px 72px;
+				display: flex;
+				flex-direction: column;
+			}
+			.brand {
+				display: flex;
+				align-items: center;
+				gap: 18px;
+				font-size: 40px;
+				font-weight: 700;
+			}
+			h1 {
+				margin: 44px 0 0;
+				font-size: 54px;
+				line-height: 1.15;
+				font-weight: 700;
+				letter-spacing: -0.01em;
+			}
+			h1 span {
+				display: block;
+				color: var(--accent);
+			}
+			.feed {
+				margin-top: auto;
+				border: 1px solid var(--line);
+				background: var(--bg-2);
+				border-radius: 6px;
+				padding: 18px 22px;
+				font-size: 22px;
+			}
+			.row {
+				display: grid;
+				grid-template-columns: 22px 230px 1fr auto;
+				line-height: 1.7;
+			}
+			.price {
+				color: var(--fg);
+			}
+			.vinted {
+				color: #4fd1c5;
+			}
+			.wallapop {
+				color: #60a5fa;
+			}
+			.milanuncios {
+				color: #f6ad55;
+			}
+			.todocoleccion {
+				color: #b794f4;
+			}
+			.foot {
+				display: flex;
+				justify-content: space-between;
+				margin-top: 22px;
+				font-size: 22px;
+				color: var(--muted);
+			}
+			.foot b {
+				color: var(--accent);
+				font-weight: 400;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="card">
+			<div class="brand">
+				<svg width="75" height="40" viewBox="0 0 64 34">
+					<rect x="0" y="0" width="34" height="34" fill="#3ddc84" />
+					<rect x="41" y="0" width="9" height="34" fill="#3ddc84" opacity="0.55" />
+					<rect x="55" y="0" width="9" height="34" fill="#3ddc84" opacity="0.28" />
+				</svg>
+				lurk
+			</div>
+			<h1 data-h1></h1>
+			<div class="feed">
+				<div class="row"><span class="vinted">●</span><span class="vinted">vinted</span><span>Chaqueta The North Face M</span><span class="price">80€</span></div>
+				<div class="row"><span class="wallapop">●</span><span class="wallapop">wallapop</span><span>PS5 Slim + 2 mandos</span><span class="price">310€</span></div>
+				<div class="row"><span class="milanuncios">●</span><span class="milanuncios">milanuncios</span><span>Bicicleta MTB 29"</span><span class="price">180€</span></div>
+			</div>
+			<div class="foot">
+				<span data-tagline></span>
+				<b>lurk.insomnis.dev</b>
+			</div>
+		</div>
+		<script>
+			const copy = {
+				es: {
+					h1: ['Anuncios nuevos de segunda mano,', 'en cuanto se publican.'],
+					tagline: 'WebSocket · Vinted · Wallapop · Milanuncios · Todocolección',
+				},
+				en: {
+					h1: ['New second-hand listings,', 'the moment they go live.'],
+					tagline: 'WebSocket · Vinted · Wallapop · Milanuncios · Todocolección',
+				},
+			};
+			const c = copy[new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'es'];
+			const h1 = document.querySelector('[data-h1]');
+			h1.textContent = c.h1[0];
+			const second = document.createElement('span');
+			second.textContent = c.h1[1];
+			h1.append(second);
+			document.querySelector('[data-tagline]').textContent = c.tagline;
+		</script>
+	</body>
+</html>

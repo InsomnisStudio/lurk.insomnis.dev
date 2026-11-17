@@ -1,0 +1,103 @@
+---
+import { Code } from 'astro:components';
+import { snippets } from '../examples';
+import { t, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+	/// The platforms in the snippets' URL; a platform page passes its own.
+	platforms?: string;
+}
+
+const { lang, platforms } = Astro.props;
+const c = t[lang].code;
+const items = snippets(platforms);
+const uid = `tabs-${Math.random().toString(36).slice(2, 8)}`;
+---
+
+<div class="tabs" data-tabs>
+	<div class="tablist" role="tablist">
+		{
+			items.map((s, i) => (
+				<button
+					role="tab"
+					id={`${uid}-${s.id}-tab`}
+					aria-controls={`${uid}-${s.id}`}
+					aria-selected={i === 0 ? 'true' : 'false'}
+					tabindex={i === 0 ? 0 : -1}
+					data-tab={s.id}
+				>
+					{s.label}
+				</button>
+			))
+		}
+		<button type="button" class="copy" data-copy data-done={c.copied}>
+			{c.copy}
+		</button>
+	</div>
+	{
+		items.map((s, i) => (
+			<div class="tabpanel" role="tabpanel" id={`${uid}-${s.id}`} aria-labelledby={`${uid}-${s.id}-tab`} hidden={i !== 0} data-panel={s.id}>
+				<div class="install">
+					# {c.install}: <code>{s.install}</code>
+				</div>
+				<Code code={s.code} lang={s.lang as any} theme="vitesse-black" />
+			</div>
+		))
+	}
+</div>
+
+<script>
+	// Tabs stay in sync across the page and remember the last language picked.
+	const KEY = 'lurk-lang-tab';
+	const groups = document.querySelectorAll<HTMLElement>('[data-tabs]');
+
+	function select(id: string) {
+		groups.forEach((g) => {
+			if (!g.querySelector(`[data-tab="${id}"]`)) return;
+			g.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => {
+				const on = b.dataset.tab === id;
+				b.setAttribute('aria-selected', String(on));
+				b.tabIndex = on ? 0 : -1;
+			});
+			g.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => (p.hidden = p.dataset.panel !== id));
+		});
+	}
+
+	groups.forEach((g) => {
+		const buttons = [...g.querySelectorAll<HTMLButtonElement>('[data-tab]')];
+		buttons.forEach((b, i) => {
+			b.addEventListener('click', () => {
+				select(b.dataset.tab!);
+				try {
+					localStorage.setItem(KEY, b.dataset.tab!);
+				} catch {}
+			});
+			b.addEventListener('keydown', (e) => {
+				const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+				if (!d) return;
+				const next = buttons[(i + d + buttons.length) % buttons.length];
+				next.focus();
+				next.click();
+			});
+		});
+
+		// Copies the visible example, with whatever URL it shows now.
+		const copy = g.querySelector<HTMLButtonElement>('[data-copy]')!;
+		const label = copy.textContent;
+		copy.addEventListener('click', async () => {
+			const code = g.querySelector<HTMLElement>('[data-panel]:not([hidden]) pre');
+			if (!code) return;
+			try {
+				await navigator.clipboard.writeText(code.innerText);
+				copy.textContent = copy.dataset.done!;
+				setTimeout(() => (copy.textContent = label), 1500);
+			} catch {}
+		});
+	});
+
+	try {
+		const saved = localStorage.getItem(KEY);
+		if (saved) select(saved);
+	} catch {}
+</script>

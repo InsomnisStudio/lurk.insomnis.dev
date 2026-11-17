@@ -1,0 +1,103 @@
+---
+import { Code } from 'astro:components';
+import type { PlatformId } from '../config';
+import { payload, streamUrl, type Format } from '../examples';
+import { t, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+	platform: PlatformId;
+}
+
+// One event of a platform in both formats; each tab shows the URL that streams it.
+const { lang, platform } = Astro.props;
+const c = t[lang];
+const formats: Format[] = ['raw', 'normalized'];
+const uid = `event-${platform}`;
+---
+
+<div class="tabs" data-event-tabs>
+	<div class="tablist" role="tablist">
+		{
+			formats.map((f, i) => (
+				<button
+					role="tab"
+					id={`${uid}-${f}-tab`}
+					aria-controls={`${uid}-${f}`}
+					aria-selected={i === 0 ? 'true' : 'false'}
+					tabindex={i === 0 ? 0 : -1}
+					data-tab={f}
+				>
+					{f}
+				</button>
+			))
+		}
+		<button type="button" class="copy" data-copy data-done={c.code.copied}>
+			{c.platformPage.copyUrl}
+		</button>
+	</div>
+	{
+		formats.map((f, i) => (
+			<div class="tabpanel" role="tabpanel" id={`${uid}-${f}`} aria-labelledby={`${uid}-${f}-tab`} hidden={i !== 0} data-panel={f}>
+				<div class="install">
+					# {c.platformPage.filter}: <code data-url>{streamUrl(platform, f)}</code>
+				</div>
+				{f === 'normalized' && <p class="raw-note">{c.docs.normalized}</p>}
+				<div class="event-json">
+					<Code code={payload(platform, f)} lang="json" theme="vitesse-black" />
+				</div>
+			</div>
+		))
+	}
+</div>
+
+<style>
+	.raw-note {
+		margin: 0;
+		padding: 10px 14px;
+		font-size: 12px;
+		color: var(--muted);
+		border-bottom: 1px solid var(--line);
+	}
+	.event-json {
+		max-height: 480px;
+		overflow: auto;
+	}
+</style>
+
+<script>
+	document.querySelectorAll<HTMLElement>('[data-event-tabs]').forEach((g) => {
+		const buttons = [...g.querySelectorAll<HTMLButtonElement>('[data-tab]')];
+		const select = (id: string) => {
+			buttons.forEach((b) => {
+				const on = b.dataset.tab === id;
+				b.setAttribute('aria-selected', String(on));
+				b.tabIndex = on ? 0 : -1;
+			});
+			g.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => (p.hidden = p.dataset.panel !== id));
+		};
+		buttons.forEach((b, i) => {
+			b.addEventListener('click', () => select(b.dataset.tab!));
+			b.addEventListener('keydown', (e) => {
+				const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+				if (!d) return;
+				const next = buttons[(i + d + buttons.length) % buttons.length];
+				next.focus();
+				next.click();
+			});
+		});
+
+		// Copies the URL of the format on show.
+		const copy = g.querySelector<HTMLButtonElement>('[data-copy]')!;
+		const label = copy.textContent;
+		copy.addEventListener('click', async () => {
+			const url = g.querySelector<HTMLElement>('[data-panel]:not([hidden]) [data-url]');
+			if (!url) return;
+			try {
+				await navigator.clipboard.writeText(url.textContent!.trim());
+				copy.textContent = copy.dataset.done!;
+				setTimeout(() => (copy.textContent = label), 1500);
+			} catch {}
+		});
+	});
+</script>

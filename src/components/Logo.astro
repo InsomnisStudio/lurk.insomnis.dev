@@ -1,0 +1,15 @@
+---
+// The stream mark: one solid block followed by two fading bars. On hover the light runs
+// through them once, like a packet going by (see .logo in global.css).
+interface Props {
+	size?: number;
+}
+
+const { size = 18 } = Astro.props;
+---
+
+<svg class="mark" width={size * (64 / 34)} height={size} viewBox="0 0 64 34" aria-hidden="true">
+	<rect x="0" y="0" width="34" height="34" fill="var(--accent)" style="--o: 1"></rect>
+	<rect x="41" y="0" width="9" height="34" fill="var(--accent)" style="--o: 0.55"></rect>
+	<rect x="55" y="0" width="9" height="34" fill="var(--accent)" style="--o: 0.28"></rect>
+</svg>

@@ -1,0 +1,73 @@
+---
+import Base from '../layouts/Base.astro';
+import CodeTabs from '../components/CodeTabs.astro';
+import EventTabs from '../components/EventTabs.astro';
+import Feed from '../components/Feed.astro';
+import Pricing from '../components/Pricing.astro';
+import { PLATFORMS, type PlatformId } from '../config';
+import { t, path, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+	platform: PlatformId;
+}
+
+const { lang, platform } = Astro.props;
+const c = t[lang];
+const p = PLATFORMS.find((x) => x.id === platform)!;
+const copy = c.platforms[platform];
+
+const jsonLd = {
+	'@context': 'https://schema.org',
+	'@type': 'WebAPI',
+	name: `Lurk — ${p.name} API`,
+	description: copy.description,
+	url: new URL(path(lang, p.slug), Astro.site).href,
+	documentation: new URL(path(lang, 'docs'), Astro.site).href,
+	offers: { '@type': 'Offer', price: p.price, priceCurrency: 'EUR' },
+};
+---
+
+<Base lang={lang} title={copy.title} description={copy.description} page={p.slug} current="platform" jsonLd={jsonLd}>
+	<section class="hero">
+		<div class="wrap">
+			<h1><span class={`p-${p.id}`}>{copy.h1}</span></h1>
+			<p class="sub">{copy.intro}</p>
+			<ul class="points">
+				{copy.points.map((x) => <li>{x}</li>)}
+			</ul>
+			<div class="actions">
+				<a class="btn" href="#pricing">
+					{c.home.ctaPrimary} · {p.price}€{c.pricing.month}
+				</a>
+				<a class="btn ghost" href={path(lang, 'docs')}>{c.home.ctaSecondary}</a>
+			</div>
+			<Feed lang={lang} label={c.home.demo} liveLabel={c.home.live} platform={p.id} />
+		</div>
+	</section>
+
+	<section>
+		<div class="wrap">
+			<h2>{c.platformPage.example}</h2>
+			<EventTabs lang={lang} platform={p.id} />
+		</div>
+	</section>
+
+	<section>
+		<div class="wrap">
+			<h2>{c.platformPage.code}</h2>
+			<CodeTabs lang={lang} platforms={p.id} />
+		</div>
+	</section>
+
+	<Pricing lang={lang} selected={[p.id]} />
+
+	<section>
+		<div class="wrap">
+			<h2>{c.platformPage.others}</h2>
+			<nav class="platforms" style="margin-top:0">
+				{PLATFORMS.filter((x) => x.id !== p.id).map((x) => <a class={`p-${x.id}`} href={path(lang, x.slug)}>{x.name} API</a>)}
+			</nav>
+		</div>
+	</section>
+</Base>

@@ -1,0 +1,36 @@
+---
+// GitHub Pages serves dist/404.html for any path that does not exist. One page for both
+// languages: we cannot know which one the visitor came from.
+import Base from '../layouts/Base.astro';
+import { PLATFORMS } from '../config';
+import { path } from '../i18n';
+---
+
+<Base lang="es" title="404 — Lurk" description="Esta página no existe." noindex>
+	<section class="hero not-found">
+		<div class="wrap">
+			<div class="term">
+				<div class="term-body">
+					<div class="term-cmd"><span class="prompt">$</span> curl -I lurk.insomnis.dev<span data-path></span></div>
+					<p class="code-404">HTTP/2 404</p>
+				</div>
+			</div>
+			<h1>Esta página no existe.</h1>
+			<p class="sub">This page doesn't exist.</p>
+			<div class="actions">
+				<a class="btn" href={path('es')}>Inicio</a>
+				<a class="btn ghost" href={path('es', 'docs')}>Docs</a>
+				<a class="btn ghost" href={path('en')} lang="en">English</a>
+			</div>
+			<nav class="platforms">
+				{PLATFORMS.map((p) => <a class={`p-${p.id}`} href={path('es', p.slug)}>{p.name} API</a>)}
+			</nav>
+		</div>
+	</section>
+</Base>
+
+<script>
+	// The path that was asked for: the build only knows /404.
+	const slot = document.querySelector('[data-path]');
+	if (slot) slot.textContent = location.pathname;
+</script>

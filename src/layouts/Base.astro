@@ -1,0 +1,105 @@
+---
+// The font is served from this site, not Google Fonts: no visitor IPs go to a third party.
+import '@fontsource/jetbrains-mono/latin-400.css';
+import '@fontsource/jetbrains-mono/latin-500.css';
+import '@fontsource/jetbrains-mono/latin-600.css';
+import '@fontsource/jetbrains-mono/latin-700.css';
+import '../styles/global.css';
+import Logo from '../components/Logo.astro';
+import { CONTACT_EMAIL, PLATFORMS } from '../config';
+import { t, path, type Lang } from '../i18n';
+import { DOC_LINKS, DOC_PATHS, type DocId } from '../legal';
+
+interface Props {
+	lang: Lang;
+	title: string;
+	description: string;
+	// Page path without language prefix, e.g. '' or 'docs' or 'vinted-api'.
+	page?: string;
+	/// The page in the other language, when its path differs (gracias / thanks).
+	otherPage?: string;
+	current?: 'home' | 'docs' | 'platform' | 'account';
+	jsonLd?: Record<string, unknown>;
+	/// Pages search engines should not list (the 404): no canonical, no alternates.
+	noindex?: boolean;
+}
+
+const { lang, title, description, page = '', otherPage = page, current, jsonLd, noindex = false } = Astro.props;
+const c = t[lang];
+const other: Lang = lang === 'es' ? 'en' : 'es';
+const canonical = new URL(path(lang, page), Astro.site);
+const alt = (l: Lang) => new URL(path(l, l === lang ? page : otherPage), Astro.site).href;
+const home = path(lang);
+---
+
+<!doctype html>
+<html lang={lang}>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		{
+			noindex ? (
+				<meta name="robots" content="noindex" />
+			) : (
+				<>
+					<link rel="canonical" href={canonical.href} />
+					<link rel="alternate" hreflang="es" href={alt('es')} />
+					<link rel="alternate" hreflang="en" href={alt('en')} />
+					<link rel="alternate" hreflang="x-default" href={alt('es')} />
+				</>
+			)
+		}
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="sitemap" href="/sitemap-index.xml" />
+		<meta name="theme-color" content="#0b0b0b" />
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Lurk" />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:url" content={canonical.href} />
+		<meta property="og:locale" content={lang === 'es' ? 'es_ES' : 'en_US'} />
+		<meta property="og:image" content={new URL(`/og-${lang}.png`, Astro.site).href} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content={c.home.h1.join(' ')} />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content={new URL(`/og-${lang}.png`, Astro.site).href} />
+		{jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+		<slot name="head" />
+	</head>
+	<body>
+		<header class="top">
+			<div class="wrap">
+				<a class="logo" href={home} aria-label="Lurk"><Logo /><span>lurk</span></a>
+				<nav>
+					<a href={path(lang, 'docs')} aria-current={current === 'docs' ? 'page' : undefined}>{c.nav.docs}</a>
+					<a href={`${home}#pricing`}>{c.nav.pricing}</a>
+					<a href={path(lang, lang === 'es' ? 'cuenta' : 'account')} aria-current={current === 'account' ? 'page' : undefined}>{c.nav.account}</a>
+					<a href={alt(other).replace(Astro.site!.origin, '')} hreflang={other} lang={other}>{other}</a>
+				</nav>
+			</div>
+		</header>
+
+		<main>
+			<slot />
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<div class="row">
+					<nav aria-label={c.nav.platforms}>
+						{PLATFORMS.map((p) => <a href={path(lang, p.slug)}>{p.name} API</a>)}
+					</nav>
+					<a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+				</div>
+				<p>{c.footer.legal}</p>
+				<p class="legal-links">
+					<span>© {new Date().getFullYear()} Lurk</span>
+					{(Object.keys(DOC_PATHS) as DocId[]).map((id) => <a href={path(lang, DOC_PATHS[id][lang])}>{DOC_LINKS[lang][id]}</a>)}
+				</p>
+			</div>
+		</footer>
+	</body>
+</html>

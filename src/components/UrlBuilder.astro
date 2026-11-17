@@ -1,0 +1,116 @@
+---
+// The feed URL for the platforms and format someone ticks, ready to copy. The code
+// examples on the same page follow it.
+import { PLATFORMS, WS_URL } from '../config';
+import { streamUrl } from '../examples';
+import { t, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+}
+
+const { lang } = Astro.props;
+const c = t[lang].code;
+const initial = ['vinted', 'wallapop'];
+---
+
+<div class="builder-box" data-builder data-base={WS_URL} data-url={streamUrl(initial.join(','))}>
+	<div class="builder">
+		<div class="opts" role="group" aria-label={c.platforms}>
+			<span class="opt-label">platforms</span>
+			{
+				PLATFORMS.map((p) => (
+					<button type="button" class={`chip p-${p.id}`} data-platform={p.id} aria-pressed={String(initial.includes(p.id))}>
+						{p.id}
+					</button>
+				))
+			}
+		</div>
+		<div class="opts" role="group" aria-label={c.format}>
+			<span class="opt-label">format</span>
+			{
+				['raw', 'normalized'].map((f) => (
+					<button type="button" class="chip" data-format={f} aria-pressed={String(f === 'raw')}>
+						{f}
+					</button>
+				))
+			}
+		</div>
+	</div>
+	<div class="built">
+		<code data-built-url>{streamUrl(initial.join(','))}</code>
+		<button type="button" class="copy" data-copy-url data-done={c.copied}>{c.copy}</button>
+	</div>
+</div>
+
+<script>
+	type Choice = { platforms: string[]; format: string };
+
+	/// No platforms means every platform on the key's plan.
+	function feedUrl(base: string, choice: Choice) {
+		// raw is the default: only normalized needs saying.
+		const query = choice.format === 'raw' ? [] : [`format=${choice.format}`];
+		if (choice.platforms.length) query.push(`platforms=${choice.platforms.join(',')}`);
+		return query.length ? `${base}?${query.join('&')}` : base;
+	}
+
+	/// Swaps the URL inside the page's highlighted code examples. Shiki keeps a string
+	/// literal in one text node, so replacing the text keeps the highlighting.
+	function rewriteSnippets(from: string, to: string) {
+		document.querySelectorAll('[data-tabs] pre').forEach((pre) => {
+			const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+			for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+				if (node.nodeValue?.includes(from)) node.nodeValue = node.nodeValue.split(from).join(to);
+			}
+		});
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-builder]').forEach((box) => {
+		const out = box.querySelector<HTMLElement>('[data-built-url]')!;
+
+		const apply = (choice: Choice) => {
+			const next = feedUrl(box.dataset.base!, choice);
+			rewriteSnippets(box.dataset.url!, next);
+			box.dataset.url = next;
+			out.textContent = next;
+			box.querySelectorAll<HTMLButtonElement>('[data-platform]').forEach((b) =>
+				b.setAttribute('aria-pressed', String(choice.platforms.includes(b.dataset.platform!))),
+			);
+			box.querySelectorAll<HTMLButtonElement>('[data-format]').forEach((b) =>
+				b.setAttribute('aria-pressed', String(b.dataset.format === choice.format)),
+			);
+		};
+
+		const read = (): Choice => ({
+			platforms: [...box.querySelectorAll<HTMLButtonElement>('[data-platform][aria-pressed="true"]')].map((b) => b.dataset.platform!),
+			format: box.querySelector<HTMLButtonElement>('[data-format][aria-pressed="true"]')?.dataset.format ?? 'raw',
+		});
+
+		// No memory between visits: it always starts on raw and the platforms shown.
+		const choose = () => apply(read());
+
+		box.querySelectorAll<HTMLButtonElement>('[data-platform]').forEach((b) =>
+			b.addEventListener('click', () => {
+				b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+				choose();
+			}),
+		);
+		box.querySelectorAll<HTMLButtonElement>('[data-format]').forEach((b) =>
+			b.addEventListener('click', () => {
+				box.querySelectorAll('[data-format]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+				choose();
+			}),
+		);
+
+		const copy = box.querySelector<HTMLButtonElement>('[data-copy-url]')!;
+		const label = copy.textContent;
+		copy.addEventListener('click', async () => {
+			try {
+				await navigator.clipboard.writeText(box.dataset.url!);
+				copy.textContent = copy.dataset.done!;
+				setTimeout(() => (copy.textContent = label), 1500);
+			} catch {}
+		});
+
+	});
+</script>

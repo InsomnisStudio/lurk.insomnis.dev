@@ -1,0 +1,95 @@
+---
+import { CHECKOUT_URL, CONNECTIONS, PLATFORMS, mailto, type PlatformId } from '../config';
+import { t, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+	/// Ticked to begin with: a platform page passes its own.
+	selected?: PlatformId[];
+}
+
+const { lang, selected = ['vinted'] } = Astro.props;
+const c = t[lang].pricing;
+const total = PLATFORMS.filter((p) => selected.includes(p.id)).reduce((sum, p) => sum + p.price, 0);
+---
+
+<section id="pricing">
+	<div class="wrap">
+		<h2>{c.head}</h2>
+		<p class="muted">{c.sub}</p>
+		{/* A form, not a link: the gateway opens a Stripe Checkout for the platforms ticked. */}
+		<form class="picker" method="post" action={CHECKOUT_URL} data-picker>
+			<input type="hidden" name="lang" value={lang} />
+			{/* Filled on submit: this tab's secret for seeing the key on the thanks page. */}
+			<input type="hidden" name="nonce" data-nonce />
+			<div class="picks">
+				{
+					PLATFORMS.map((p) => (
+						<label class={`pick p-${p.id}`}>
+							<input type="checkbox" name="platform" value={p.id} data-price={p.price} data-name={p.name} checked={selected.includes(p.id)} />
+							<span class="pick-name">{p.name}</span>
+							<span class="pick-price">
+								{p.price}€<small>{c.month}</small>
+							</span>
+						</label>
+					))
+				}
+			</div>
+			<div class="checkout">
+				<ul class="perks">
+					{c.perks(CONNECTIONS).map((x) => (
+						<li>{x}</li>
+					))}
+				</ul>
+				<div class="total">
+					<div class="total-sum">
+						<span data-total>{total}</span>€<small>{c.month}</small>
+						<small class="vat">{c.vat}</small>
+					</div>
+					<div class="total-what muted" data-what data-none-text={c.none}>
+						{total === 0
+							? c.none
+							: PLATFORMS.filter((p) => selected.includes(p.id))
+									.map((p) => p.name)
+									.join(' + ')}
+					</div>
+					<button type="submit" class="btn" data-submit disabled={total === 0}>
+						{c.cta}
+					</button>
+				</div>
+			</div>
+		</form>
+		<p class="custom">
+			{c.custom} <a href={mailto(c.customSubject, c.customBody)}>{c.customCta} →</a>
+		</p>
+	</div>
+</section>
+
+<script>
+	// The total and the button follow the platforms ticked.
+	document.querySelectorAll<HTMLFormElement>('[data-picker]').forEach((form) => {
+		const boxes = [...form.querySelectorAll<HTMLInputElement>('input[name="platform"]')];
+		const total = form.querySelector<HTMLElement>('[data-total]')!;
+		const what = form.querySelector<HTMLElement>('[data-what]')!;
+		const submit = form.querySelector<HTMLButtonElement>('[data-submit]')!;
+		const update = () => {
+			const on = boxes.filter((b) => b.checked);
+			total.textContent = String(on.reduce((sum, b) => sum + Number(b.dataset.price), 0));
+			what.textContent = on.length ? on.map((b) => b.dataset.name).join(' + ') : what.dataset.noneText!;
+			submit.disabled = on.length === 0;
+		};
+		boxes.forEach((b) => b.addEventListener('change', update));
+		// A random nonce kept in this tab: with it, the thanks page Stripe returns to can
+		// show the key once. Without storage the key still goes by email.
+		form.addEventListener('submit', () => {
+			try {
+				const bytes = crypto.getRandomValues(new Uint8Array(24));
+				const nonce = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+				sessionStorage.setItem('lurk-checkout-nonce', nonce);
+				form.querySelector<HTMLInputElement>('[data-nonce]')!.value = nonce;
+			} catch {}
+		});
+		// The browser may restore ticks from an earlier visit (back button).
+		update();
+	});
+</script>

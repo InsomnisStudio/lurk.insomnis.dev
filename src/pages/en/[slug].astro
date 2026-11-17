@@ -1,0 +1,12 @@
+---
+import Platform from '../../views/Platform.astro';
+import { PLATFORMS } from '../../config';
+
+export function getStaticPaths() {
+	return PLATFORMS.map((p) => ({ params: { slug: p.slug }, props: { platform: p.id } }));
+}
+
+const { platform } = Astro.props;
+---
+
+<Platform lang="en" platform={platform} />

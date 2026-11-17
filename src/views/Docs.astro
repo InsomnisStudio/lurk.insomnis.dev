@@ -1,0 +1,85 @@
+---
+import { Code } from 'astro:components';
+import Base from '../layouts/Base.astro';
+import CodeTabs from '../components/CodeTabs.astro';
+import UrlBuilder from '../components/UrlBuilder.astro';
+import { DEMO_WS_URL } from '../config';
+import { payload } from '../examples';
+import { t, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+}
+
+const { lang } = Astro.props;
+const d = t[lang].docs;
+
+const reconnect = `import asyncio
+from websockets.asyncio.client import connect
+from websockets.exceptions import ConnectionClosed
+
+async def run():
+    # connect() as an async iterator reconnects with exponential backoff
+    async for ws in connect(URL, additional_headers={"Authorization": "Bearer YOUR_API_KEY"}):
+        try:
+            async for message in ws:
+                handle(message)
+        except ConnectionClosed:
+            continue`;
+---
+
+<Base lang={lang} title={d.title} description={d.description} page="docs" current="docs">
+	<section class="hero docs">
+		<div class="wrap">
+			<h1>{d.h1}</h1>
+
+			<h3>{d.endpoint}</h3>
+			<UrlBuilder lang={lang} />
+
+			<h3>{d.auth}</h3>
+			<p class="muted">{d.authText}</p>
+			<code class="inline-code">Authorization: Bearer YOUR_API_KEY</code>
+
+			<h3>{d.params}</h3>
+			<table class="kv">
+				<tbody>{d.paramRows.map(([k, v]) => <tr><td>{k}</td><td>{v}</td></tr>)}</tbody>
+			</table>
+
+			<h3>{d.errors}</h3>
+			<table class="kv">
+				<tbody>{d.errorRows.map(([k, v]) => <tr><td>{k}</td><td>{v}</td></tr>)}</tbody>
+			</table>
+
+			<h3>{d.event}</h3>
+			<p class="muted">{d.eventText}</p>
+			<table class="kv">
+				<tbody>{d.envelopeRows.map(([k, v]) => <tr><td>{k}</td><td>{v}</td></tr>)}</tbody>
+			</table>
+			<p class="muted note">{d.duplicates}</p>
+			<div class="block"><Code code={payload('vinted')} lang="json" theme="vitesse-black" /></div>
+			<p class="muted note">{d.raw}</p>
+
+			<h3>{d.fields}</h3>
+			<p class="muted note">{d.normalized}</p>
+			<table class="kv">
+				<tbody>{d.fieldRows.map(([k, v]) => <tr><td>{k}</td><td>{v}</td></tr>)}</tbody>
+			</table>
+			<p class="muted note">{d.stability}</p>
+
+			{DEMO_WS_URL && (
+				<>
+					<h3>{d.demo}</h3>
+					<p class="muted">{d.demoText}</p>
+					<code class="inline-code">npx wscat -c {DEMO_WS_URL}</code>
+				</>
+			)}
+
+			<h3>{d.examples}</h3>
+			<CodeTabs lang={lang} />
+
+			<h3>{d.reconnect}</h3>
+			<p class="muted">{d.reconnectText}</p>
+			<div class="block"><Code code={reconnect} lang="python" theme="vitesse-black" /></div>
+		</div>
+	</section>
+</Base>

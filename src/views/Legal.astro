@@ -1,0 +1,77 @@
+---
+// The legal notice, privacy policy or terms, from src/legal.ts.
+import Base from '../layouts/Base.astro';
+import { LEGAL } from '../config';
+import { DOCS, DOC_PATHS, UPDATED, type DocId } from '../legal';
+import type { Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+	doc: DocId;
+}
+
+const { lang, doc } = Astro.props;
+const d = DOCS[lang][doc];
+const other: Lang = lang === 'es' ? 'en' : 'es';
+const date = new Intl.DateTimeFormat(lang, { dateStyle: 'long' }).format(new Date(LEGAL.updated));
+---
+
+<Base lang={lang} title={d.title} description={d.description} page={DOC_PATHS[doc][lang]} otherPage={DOC_PATHS[doc][other]}>
+	<section class="hero legal">
+		<div class="wrap">
+			<h1>{d.h1}</h1>
+			<p class="muted updated">{UPDATED[lang]}: {date}</p>
+			{
+				d.sections.map((s) => (
+					<>
+						<h2>{s.h}</h2>
+						{s.body.map((b) => (Array.isArray(b) ? <ul>{b.map((li) => <li set:html={li} />)}</ul> : <p set:html={b} />))}
+					</>
+				))
+			}
+		</div>
+	</section>
+</Base>
+
+<style>
+	/* Lines short enough to read, aligned with the rest of the site. */
+	.legal .wrap > * {
+		max-width: 720px;
+	}
+	.updated {
+		margin: 12px 0 8px;
+		font-size: 13px;
+	}
+	.legal h2 {
+		margin: 36px 0 12px;
+	}
+	.legal p,
+	.legal li {
+		font-size: 14px;
+		line-height: 1.7;
+		color: var(--muted);
+	}
+	.legal p {
+		margin: 0 0 12px;
+	}
+	.legal ul {
+		margin: 0 0 12px;
+		padding-left: 2ch;
+	}
+	.legal li {
+		margin-bottom: 6px;
+	}
+	.legal :global(strong) {
+		color: var(--fg);
+		font-weight: 500;
+	}
+	.legal :global(a) {
+		color: var(--fg);
+		text-decoration: underline;
+		text-decoration-color: var(--dim);
+		text-underline-offset: 3px;
+	}
+	.legal :global(a:hover) {
+		color: var(--accent);
+	}
+</style>

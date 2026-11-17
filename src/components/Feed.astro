@@ -1,0 +1,476 @@
+---
+import { DEMO_FEED } from '../examples';
+import { DEMO_WS_URL, PLATFORMS, type PlatformId } from '../config';
+import { t, type Lang } from '../i18n';
+
+interface Props {
+	lang: Lang;
+	label: string;
+	liveLabel: string;
+	/// Only this platform's listings (its page); every platform when unset.
+	platform?: PlatformId;
+}
+
+const { lang, label, liveLabel, platform } = Astro.props;
+const f = t[lang].feed;
+const ROWS = 12;
+const lines = platform ? DEMO_FEED.filter(([p]) => p === platform) : DEMO_FEED;
+const initial = Array.from({ length: ROWS }, (_, i) => lines[i % lines.length]);
+const ws = DEMO_WS_URL ? `${DEMO_WS_URL}${platform ? `?platforms=${platform}` : ''}` : '';
+// The command a visitor can run themselves to get the same feed the terminal shows. Quoted
+// when it has a query: `?` is a glob in most shells.
+const command = ws ? `npx wscat -c ${platform ? `"${ws}"` : ws}` : '';
+---
+
+<div
+	class="term"
+	data-feed-root
+	data-feed={JSON.stringify(lines)}
+	data-ws={ws}
+	data-live-label={liveLabel}
+	data-rows={ROWS}
+	data-open-label={f.open}
+	data-newer-one={f.newer(1)}
+	data-newer-many={f.newer(2)}
+	data-count={f.count(1111, 2222)}
+	data-copied={f.copied}
+	data-json-label={f.json}
+>
+	<div class="term-bar">
+		<span class="status" data-feed-status data-state="sample">
+			<span class="status-dot" aria-hidden="true"></span>
+			<span data-feed-label>{label}</span>
+		</span>
+		<button type="button" class="term-btn search-btn" data-expand title={f.expand}>{f.search} ⤢</button>
+	</div>
+	<div class="term-body">
+		{command && <div class="term-cmd"><span class="prompt">$</span> {command}</div>}
+		<ul class="feed" data-compact style={`--rows: ${ROWS}`} aria-live="off">
+			{
+				initial.map(([p, title, price]) => (
+					<li data-p={p}>
+						<span class="row">
+							<span class={`dot p-${p}`}>●</span>
+							<span class="time">--:--:--</span>
+							<span class={`p-${p}`}>{p}</span>
+							<span class="title">{title}</span>
+							<span class="price">{price}€</span>
+						</span>
+					</li>
+				))
+			}
+		</ul>
+	</div>
+
+	<dialog class="feed-dialog" data-dialog aria-label={liveLabel}>
+		<div class="term-bar">
+			<span class="status" data-feed-status data-state="sample">
+				<span class="status-dot" aria-hidden="true"></span>
+				<span data-feed-label>{label}</span>
+			</span>
+			<button type="button" class="term-btn" data-close aria-label={f.close} title={f.close}>✕</button>
+		</div>
+		<form class="feed-search" data-search role="search" onsubmit="return false">
+			<div class="search-row">
+				<input type="search" name="q" placeholder={f.searchPlaceholder} aria-label={f.searchLabel} autocomplete="off" spellcheck="false" data-q />
+				<input type="number" name="max" min="0" step="1" inputmode="numeric" placeholder={f.maxPrice} aria-label={f.maxPrice} data-max />
+			</div>
+			<div class="search-row">
+				<div class="opts" role="group" aria-label="platforms">
+					{(platform ? PLATFORMS.filter((p) => p.id === platform) : PLATFORMS).map((p) => (
+						<button type="button" class={`chip p-${p.id}`} data-platform={p.id} aria-pressed="true" disabled={!!platform}>
+							{p.id}
+						</button>
+					))}
+				</div>
+				<span class="search-count" data-search-count aria-live="polite"></span>
+			</div>
+			<p class="search-rate">{f.rate}</p>
+		</form>
+		<p class="dialog-hint" data-hint data-live-hint={f.hint}>{f.sample}</p>
+		<div class="big-wrap">
+			<button type="button" class="newer" data-newer-pill hidden></button>
+			<ul class="feed big" data-big aria-live="off"></ul>
+		</div>
+	</dialog>
+
+	{/* One listing's event, as a bot receives it: still, however fast the feed moves. */}
+	<dialog class="event-dialog" data-viewer>
+		<div class="term-bar">
+			<span class="viewer-title"><span data-viewer-platform></span> <span data-viewer-title></span></span>
+			<span class="viewer-actions">
+				<button type="button" class="term-btn" data-viewer-copy>{f.copyJson}</button>
+				<a class="term-btn" data-viewer-open target="_blank" rel="noopener nofollow">{f.open}</a>
+				<button type="button" class="term-btn" data-viewer-close aria-label={f.close} title={f.close}>✕</button>
+			</span>
+		</div>
+		<div class="json-tree" data-viewer-tree></div>
+	</dialog>
+</div>
+
+<script>
+	type Line = { platform: string; title: string; price: number; url?: string; at: Date; event?: unknown; text?: string };
+	type Query = { terms: string[]; max: number | null; platforms: string[] | null };
+	type Item = Record<string, any>;
+
+	// Kept for the expanded view: everything since the page opened, newest first. Enough
+	// for a search to find something in a quiet niche.
+	const HISTORY = 1000;
+
+	/// Lowercase, without accents: "Colección" finds "coleccion".
+	const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+	const num = (v: unknown) => (typeof v === 'number' ? v : Number.parseFloat(String(v ?? '')));
+	const absolute = (url: unknown, origin: string) => {
+		if (typeof url !== 'string' || !url) return undefined;
+		return /^https?:\/\//.test(url) ? url : `${origin}${url.startsWith('/') ? '' : '/'}${url}`;
+	};
+
+	/// Title, price in euros, link and searchable text of an item, in either format: raw
+	/// items carry each platform's own fields.
+	function read(platform: string, format: string, item: Item) {
+		if (format === 'normalized') {
+			return {
+				title: item.title,
+				price: num(item.price_in_cent) / 100,
+				url: item.url,
+				text: [item.title, item.brand, item.description],
+			};
+		}
+		const brand = typeof item.brand === 'object' ? item.brand?.title : item.brand ?? item.brand_title;
+		switch (platform) {
+			case 'vinted':
+				return { title: item.title, price: num(item.price?.amount ?? item.price), url: item.url, text: [item.title, brand, item.description] };
+			case 'wallapop':
+				return {
+					title: item.title,
+					price: num(item.price?.amount ?? item.price),
+					url: item.web_slug ? `https://es.wallapop.com/item/${item.web_slug}` : item.url,
+					text: [item.title, item.description],
+				};
+			case 'milanuncios':
+				return {
+					title: item.title,
+					price: num(item.price?.cashPrice?.value ?? item.price),
+					url: absolute(item.url, 'https://www.milanuncios.com'),
+					text: [item.title, item.description],
+				};
+			case 'todocoleccion':
+				return {
+					title: item.title,
+					price: num(item.price),
+					url: absolute(item.url, 'https://www.todocoleccion.net'),
+					text: [item.title, item.google_analytics?.brand, item.description_plain ?? item.description],
+				};
+			default:
+				return { title: item.title ?? '', price: num(item.price), url: item.url, text: [item.title] };
+		}
+	}
+
+	/// Every term must appear in the title, the brand or the description.
+	function matches(line: Line, q: Query) {
+		if (q.platforms && !q.platforms.includes(line.platform)) return false;
+		if (q.max !== null && !(line.price <= q.max)) return false;
+		const text = line.text ?? fold(line.title);
+		return q.terms.every((t) => text.includes(t));
+	}
+	const active = (q: Query) => q.terms.length > 0 || q.max !== null || q.platforms !== null;
+	const pad = (n: number) => String(n).padStart(2, '0');
+	const stamp = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+	const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+	const isLink = (url?: string) => !!url && /^https?:\/\//.test(url);
+
+	/// A listing's row: a link to it, in both views. The expanded one adds a button that
+	/// opens its event; sample rows (no event, no link) are plain.
+	function row(line: Line, expanded: boolean, jsonLabel = ''): HTMLLIElement {
+		const li = document.createElement('li');
+		li.dataset.p = line.platform;
+		if (!reduced) li.className = 'new';
+		const el = document.createElement(isLink(line.url) ? 'a' : 'span');
+		el.className = 'row';
+		if (el instanceof HTMLAnchorElement) {
+			el.href = line.url!;
+			el.target = '_blank';
+			el.rel = 'noopener nofollow';
+		}
+		el.innerHTML =
+			'<span class="dot">●</span><span class="time"></span><span></span><span class="title"></span><span class="price"></span>';
+		el.children[0].className = `dot p-${line.platform}`;
+		el.children[1].textContent = stamp(line.at);
+		el.children[2].className = `p-${line.platform}`;
+		el.children[2].textContent = line.platform;
+		el.children[3].textContent = line.title;
+		el.children[4].textContent = Number.isFinite(line.price) ? `${Math.round(line.price)}€` : '';
+		li.append(el);
+		if (expanded && line.event) {
+			const json = document.createElement('button');
+			json.type = 'button';
+			json.className = 'json-btn';
+			json.textContent = 'json';
+			json.title = jsonLabel;
+			json.setAttribute('aria-label', `${jsonLabel}: ${line.title}`);
+			li.append(json);
+		}
+		return li;
+	}
+
+	/// A JSON value as a tree: objects and arrays fold. The envelope and the listing open;
+	/// inside it, small parts open and large ones (the seller, many photos) start folded.
+	function tree(value: unknown, key?: string, depth = 0): HTMLElement {
+		const label = () => {
+			const k = document.createElement('span');
+			k.className = 'j-key';
+			k.textContent = `${key}: `;
+			return k;
+		};
+		if (value !== null && typeof value === 'object') {
+			const list = Array.isArray(value);
+			const entries = list ? value.map((v, i) => [String(i), v] as const) : Object.entries(value as object);
+			const details = document.createElement('details');
+			details.open = depth < 3 || entries.length <= 6;
+			const summary = document.createElement('summary');
+			if (key !== undefined) summary.append(label());
+			const shape = document.createElement('span');
+			shape.className = 'j-shape';
+			shape.textContent = list ? `[${entries.length}]` : `{${entries.length}}`;
+			summary.append(shape);
+			details.append(summary);
+			const kids = document.createElement('div');
+			kids.className = 'j-kids';
+			for (const [k, v] of entries) kids.append(tree(v, list ? k : JSON.stringify(k).slice(1, -1), depth + 1));
+			details.append(kids);
+			return details;
+		}
+		const leaf = document.createElement('div');
+		leaf.className = 'j-leaf';
+		if (key !== undefined) leaf.append(label());
+		const type = value === null ? 'null' : typeof value;
+		const text = typeof value === 'string' ? JSON.stringify(value) : String(value);
+		const v = document.createElement(typeof value === 'string' && isLink(value) ? 'a' : 'span');
+		v.className = `j-${type}`;
+		v.textContent = text;
+		if (v instanceof HTMLAnchorElement) {
+			v.href = value as string;
+			v.target = '_blank';
+			v.rel = 'noopener nofollow';
+		}
+		leaf.append(v);
+		return leaf;
+	}
+
+	/// The newest on top; the list slides down by one row.
+	function slideIn(ul: HTMLElement, li: HTMLElement) {
+		if (reduced) return;
+		ul.style.transition = 'none';
+		ul.style.transform = `translateY(-${li.offsetHeight}px)`;
+		void ul.offsetHeight;
+		ul.style.transition = 'transform 250ms ease-out';
+		ul.style.transform = '';
+	}
+
+	function setup(root: HTMLElement) {
+		const compact = root.querySelector<HTMLUListElement>('[data-compact]')!;
+		const big = root.querySelector<HTMLUListElement>('[data-big]')!;
+		const dialog = root.querySelector<HTMLDialogElement>('[data-dialog]')!;
+		const viewer = root.querySelector<HTMLDialogElement>('[data-viewer]')!;
+		const pill = root.querySelector<HTMLButtonElement>('[data-newer-pill]')!;
+		const hint = root.querySelector<HTMLElement>('[data-hint]')!;
+		const rows = Number(root.dataset.rows);
+		const history: Line[] = [];
+		// Each expanded row's listing, for filtering and opening without counting positions.
+		const lineOf = new WeakMap<Element, Line>();
+		let unseen = 0;
+
+		const form = root.querySelector<HTMLFormElement>('[data-search]')!;
+		const qInput = form.querySelector<HTMLInputElement>('[data-q]')!;
+		const maxInput = form.querySelector<HTMLInputElement>('[data-max]')!;
+		const chips = [...form.querySelectorAll<HTMLButtonElement>('[data-platform]')];
+		const counter = form.querySelector<HTMLElement>('[data-search-count]')!;
+
+		function readQuery(): Query {
+			const terms = fold(qInput.value).split(/\s+/).filter(Boolean);
+			const max = maxInput.value === '' ? null : Number(maxInput.value);
+			const on = chips.filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.dataset.platform!);
+			return { terms, max: Number.isFinite(max) ? max : null, platforms: on.length === chips.length ? null : on };
+		}
+		let query = readQuery();
+
+		/// Hides an expanded row the search leaves out.
+		function mark(li: HTMLElement) {
+			const line = lineOf.get(li);
+			li.hidden = active(query) && !(line && matches(line, query));
+		}
+
+		function count() {
+			if (!active(query)) return (counter.textContent = '');
+			const hits = history.filter((l) => matches(l, query)).length;
+			counter.textContent = root.dataset.count!.replace('1111', String(hits)).replace('2222', String(history.length));
+		}
+
+		function applySearch() {
+			query = readQuery();
+			for (const li of big.children) mark(li as HTMLElement);
+			count();
+		}
+
+		qInput.addEventListener('input', applySearch);
+		maxInput.addEventListener('input', applySearch);
+		chips.forEach((c) =>
+			c.addEventListener('click', () => {
+				if (c.disabled) return;
+				c.setAttribute('aria-pressed', String(c.getAttribute('aria-pressed') !== 'true'));
+				applySearch();
+			}),
+		);
+		// The browser may restore typed text on back/forward: start from what is shown.
+		query = readQuery();
+
+		const newerText = (n: number) => (n === 1 ? root.dataset.newerOne! : root.dataset.newerMany!.replace('2', String(n)));
+
+		/// Adds a listing to the expanded view. Scrolled down reading, the list keeps still and
+		/// counts what arrived; at the top, it moves like the compact one.
+		function addBig(line: Line) {
+			const li = row(line, true, root.dataset.jsonLabel);
+			lineOf.set(li, line);
+			mark(li);
+			const reading = big.scrollTop > 4;
+			big.prepend(li);
+			while (big.children.length > HISTORY) big.lastElementChild!.remove();
+			count();
+			if (li.hidden) return;
+			if (reading) {
+				big.scrollTop += li.offsetHeight;
+				unseen += 1;
+				pill.textContent = newerText(unseen);
+				pill.hidden = false;
+			} else if (dialog.open) {
+				slideIn(big, li);
+			}
+		}
+
+		function push(line: Line) {
+			history.unshift(line);
+			history.length = Math.min(history.length, HISTORY);
+			const li = row(line, false);
+			compact.prepend(li);
+			while (compact.children.length > rows) compact.lastElementChild!.remove();
+			slideIn(compact, li);
+			addBig(line);
+		}
+
+		// A row's json button opens its event in the viewer, which holds still while the
+		// feed moves on.
+		let shown: Line | undefined;
+		const viewerOpen = viewer.querySelector<HTMLAnchorElement>('[data-viewer-open]')!;
+		const viewerCopy = viewer.querySelector<HTMLButtonElement>('[data-viewer-copy]')!;
+		const copyLabel = viewerCopy.textContent;
+		big.addEventListener('click', (e) => {
+			const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button.json-btn');
+			const line = button && lineOf.get(button.parentElement!);
+			if (!line?.event) return;
+			shown = line;
+			const platform = viewer.querySelector<HTMLElement>('[data-viewer-platform]')!;
+			platform.className = `p-${line.platform}`;
+			platform.textContent = line.platform;
+			viewer.querySelector<HTMLElement>('[data-viewer-title]')!.textContent = line.title;
+			viewer.querySelector<HTMLElement>('[data-viewer-tree]')!.replaceChildren(tree(line.event));
+			viewerOpen.hidden = !isLink(line.url);
+			if (isLink(line.url)) viewerOpen.href = line.url!;
+			viewerCopy.textContent = copyLabel;
+			viewer.showModal();
+		});
+		viewerCopy.addEventListener('click', async () => {
+			if (!shown) return;
+			try {
+				await navigator.clipboard.writeText(JSON.stringify(shown.event, null, 2));
+				viewerCopy.textContent = root.dataset.copied!;
+				setTimeout(() => (viewerCopy.textContent = copyLabel), 1500);
+			} catch {}
+		});
+		viewer.querySelector('[data-viewer-close]')!.addEventListener('click', () => viewer.close());
+		viewer.addEventListener('click', (e) => {
+			if (e.target === viewer) viewer.close();
+		});
+
+		pill.addEventListener('click', () => {
+			big.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+		});
+		big.addEventListener('scroll', () => {
+			if (big.scrollTop <= 4) {
+				unseen = 0;
+				pill.hidden = true;
+			}
+		});
+
+		root.querySelector('[data-expand]')!.addEventListener('click', () => {
+			dialog.showModal();
+			qInput.focus();
+		});
+		root.querySelector('[data-close]')!.addEventListener('click', () => dialog.close());
+		// A click on the backdrop closes it too.
+		dialog.addEventListener('click', (e) => {
+			if (e.target === dialog) dialog.close();
+		});
+
+		// Scripted playback of sample listings until the live sample answers, or instead of it.
+		const samples: [string, string, number][] = JSON.parse(root.dataset.feed!);
+		// The rendered sample rows, newest on top, are samples[0], samples[1]…: the history and
+		// the expanded list start as the same rows, in the same order.
+		const now = Date.now();
+		[...compact.children].forEach((li, i) => {
+			const [platform, title, price] = samples[i % samples.length];
+			const line = { platform, title, price, at: new Date(now - i * 1700) };
+			li.querySelector('.time')!.textContent = stamp(line.at);
+			history.push(line);
+			const bigLi = row(line, true, root.dataset.jsonLabel);
+			lineOf.set(bigLi, line);
+			mark(bigLi);
+			big.append(bigLi);
+		});
+		count();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		if (!reduced && samples.length) {
+			let i = compact.children.length % samples.length;
+			const tick = () => {
+				const [platform, title, price] = samples[i++ % samples.length];
+				push({ platform, title, price, at: new Date() });
+				timer = setTimeout(tick, 900 + Math.random() * 1800);
+			};
+			timer = setTimeout(tick, 1200);
+		}
+
+		// Real listings from the public demo endpoint: first the latest ones it kept per
+		// platform, then live.
+		if (!root.dataset.ws) return;
+		let live = false;
+		const socket = new WebSocket(root.dataset.ws);
+		socket.onmessage = (e) => {
+			try {
+				const event = JSON.parse(e.data);
+				const at = event.sampled_at_ms ? new Date(event.sampled_at_ms) : new Date();
+				// What a bot gets from /v1/feed: the demo's own stamp is not part of it.
+				delete event.sampled_at_ms;
+				for (const item of event.items ?? []) {
+					const platform = item.platform ?? event.platform;
+					const got = read(platform, event.format ?? 'raw', item);
+					if (!got.title) continue;
+					if (!live) {
+						live = true;
+						clearTimeout(timer);
+						compact.replaceChildren();
+						big.replaceChildren();
+						history.length = 0;
+						hint.textContent = hint.dataset.liveHint!;
+						root.querySelectorAll<HTMLElement>('[data-feed-status]').forEach((status) => {
+							status.dataset.state = 'live';
+							status.querySelector('[data-feed-label]')!.textContent = root.dataset.liveLabel!;
+						});
+					}
+					const text = fold(got.text.filter((t) => typeof t === 'string').join(' '));
+					push({ platform, title: got.title, price: got.price, url: got.url, at, event, text });
+				}
+			} catch {}
+		};
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-feed-root]').forEach(setup);
+</script>
