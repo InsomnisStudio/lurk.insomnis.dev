@@ -1,17 +1,19 @@
 ---
 import { Code } from 'astro:components';
-import { snippets } from '../examples';
+import { snippets, type Snippet } from '../examples';
 import { t, type Lang } from '../i18n';
 
 interface Props {
 	lang: Lang;
 	/// The platforms in the snippets' URL; a platform page passes its own.
 	platforms?: string;
+	/// Other code to show in place of the connection examples (a guide's).
+	items?: Snippet[];
 }
 
 const { lang, platforms } = Astro.props;
 const c = t[lang].code;
-const items = snippets(platforms);
+const items = Astro.props.items ?? snippets(platforms);
 const uid = `tabs-${Math.random().toString(36).slice(2, 8)}`;
 ---
 
@@ -38,9 +40,11 @@ const uid = `tabs-${Math.random().toString(36).slice(2, 8)}`;
 	{
 		items.map((s, i) => (
 			<div class="tabpanel" role="tabpanel" id={`${uid}-${s.id}`} aria-labelledby={`${uid}-${s.id}-tab`} hidden={i !== 0} data-panel={s.id}>
-				<div class="install">
-					# {c.install}: <code>{s.install}</code>
-				</div>
+				{s.install && (
+					<div class="install">
+						# {c.install}: <code>{s.install}</code>
+					</div>
+				)}
 				<Code code={s.code} lang={s.lang as any} theme="vitesse-black" />
 			</div>
 		))

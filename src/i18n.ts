@@ -18,7 +18,7 @@ type PlatformCopy = {
 };
 
 const es = {
-	nav: { docs: 'docs', pricing: 'precio', account: 'cuenta', platforms: 'plataformas' },
+	nav: { docs: 'docs', pricing: 'precio', account: 'cuenta', platforms: 'plataformas', guides: 'guías' },
 	home: {
 		title: 'Lurk — API en tiempo real de Vinted, Wallapop, Milanuncios y Todocolección',
 		description:
@@ -129,6 +129,20 @@ Qué necesitas:
 		example: 'Ejemplo de evento',
 		code: 'Ejemplo de conexión',
 		others: 'Otras plataformas',
+		guides: 'Guías',
+	},
+	guides: {
+		title: 'Guías — Lurk',
+		description: 'Guías paso a paso para crear bots y alertas de anuncios nuevos de Vinted, Wallapop, Milanuncios y Todocolección, con el código completo.',
+		h1: 'Guías',
+		sub: 'Bots y alertas de anuncios nuevos, paso a paso y con el código completo.',
+		published: 'Publicada',
+		updated: 'Actualizada',
+		toc: 'En esta guía',
+		// The platforms the guide is about, and the price of all of them.
+		cta: (platforms: string, price: number) => `Recibe todos los anuncios nuevos de ${platforms} por ${price} €/mes, o pruébalo antes con el demo, sin key.`,
+		ctaHead: 'El feed completo',
+		more: 'Más guías',
 	},
 	docs: {
 		title: 'Docs — Lurk',
@@ -238,7 +252,7 @@ Qué necesitas:
 };
 
 const en: typeof es = {
-	nav: { docs: 'docs', pricing: 'pricing', account: 'account', platforms: 'platforms' },
+	nav: { docs: 'docs', pricing: 'pricing', account: 'account', platforms: 'platforms', guides: 'guides' },
 	home: {
 		title: 'Lurk — Real-time API for Vinted, Wallapop, Milanuncios and Todocolección',
 		description:
@@ -347,6 +361,19 @@ How did you find us?:
 		example: 'Example event',
 		code: 'Connection example',
 		others: 'Other platforms',
+		guides: 'Guides',
+	},
+	guides: {
+		title: 'Guides — Lurk',
+		description: 'Step-by-step guides to building bots and alerts for new listings on Vinted, Wallapop, Milanuncios and Todocolección, with the full code.',
+		h1: 'Guides',
+		sub: 'Bots and alerts for new listings, step by step and with the full code.',
+		published: 'Published',
+		updated: 'Updated',
+		toc: 'In this guide',
+		cta: (platforms: string, price: number) => `Get every new listing from ${platforms} for €${price} a month, or try the demo first, no key needed.`,
+		ctaHead: 'The full feed',
+		more: 'More guides',
 	},
 	docs: {
 		title: 'Docs — Lurk',

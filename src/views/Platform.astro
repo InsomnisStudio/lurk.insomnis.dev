@@ -6,6 +6,7 @@ import Feed from '../components/Feed.astro';
 import Pricing from '../components/Pricing.astro';
 import { PLATFORMS, type PlatformId } from '../config';
 import { t, path, type Lang } from '../i18n';
+import { guidePage, guides } from '../guides';
 
 interface Props {
 	lang: Lang;
@@ -16,6 +17,7 @@ const { lang, platform } = Astro.props;
 const c = t[lang];
 const p = PLATFORMS.find((x) => x.id === platform)!;
 const copy = c.platforms[platform];
+const related = await guides(lang, platform);
 
 const jsonLd = {
 	'@context': 'https://schema.org',
@@ -60,6 +62,19 @@ const jsonLd = {
 		</div>
 	</section>
 
+	{
+		related.length > 0 && (
+			<section>
+				<div class="wrap">
+					<h2>{c.platformPage.guides}</h2>
+					<ul class="guide-links">
+						{related.map((g) => <li><a href={path(lang, guidePage(lang, g.data.slug))}>{g.data.h1}</a></li>)}
+					</ul>
+				</div>
+			</section>
+		)
+	}
+
 	<Pricing lang={lang} selected={[p.id]} />
 
 	<section>
@@ -71,3 +86,15 @@ const jsonLd = {
 		</div>
 	</section>
 </Base>
+
+<style>
+	.guide-links {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+	}
+	.guide-links li::before {
+		content: '> ';
+		color: var(--accent);
+	}
+</style>

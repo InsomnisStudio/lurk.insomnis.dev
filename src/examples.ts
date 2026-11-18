@@ -221,7 +221,10 @@ export function streamUrl(platforms: string, format: Format = 'raw') {
 	return `${WS_URL}?${format === 'raw' ? '' : 'format=normalized&'}platforms=${platforms}`;
 }
 
-export function snippets(platforms = 'vinted,wallapop') {
+/// One tab of code; its id keeps the same language picked across every tab group.
+export type Snippet = { id: string; label: string; lang: string; install?: string; code: string };
+
+export function snippets(platforms = 'vinted,wallapop'): Snippet[] {
 	const url = streamUrl(platforms);
 	return [
 		{

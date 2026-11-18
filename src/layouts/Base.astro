@@ -9,6 +9,7 @@ import Logo from '../components/Logo.astro';
 import { CONTACT_EMAIL, PLATFORMS } from '../config';
 import { t, path, type Lang } from '../i18n';
 import { DOC_LINKS, DOC_PATHS, type DocId } from '../legal';
+import { GUIDES_PATH } from '../guides';
 
 interface Props {
 	lang: Lang;
@@ -18,7 +19,7 @@ interface Props {
 	page?: string;
 	/// The page in the other language, when its path differs (gracias / thanks).
 	otherPage?: string;
-	current?: 'home' | 'docs' | 'platform' | 'account';
+	current?: 'home' | 'docs' | 'platform' | 'account' | 'guides';
 	jsonLd?: Record<string, unknown>;
 	/// Pages search engines should not list (the 404): no canonical, no alternates.
 	noindex?: boolean;
@@ -91,6 +92,7 @@ const home = path(lang);
 				<div class="row">
 					<nav aria-label={c.nav.platforms}>
 						{PLATFORMS.map((p) => <a href={path(lang, p.slug)}>{p.name} API</a>)}
+						<a href={path(lang, GUIDES_PATH[lang])}>{c.nav.guides}</a>
 					</nav>
 					<a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
 				</div>

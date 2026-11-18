@@ -1,0 +1,265 @@
+---
+// One guide, from src/content/guides.
+import { render } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import { PLATFORMS } from '../config';
+import { GUIDES_PATH, guidePage, guides, type Guide } from '../guides';
+import { t, path, type Lang } from '../i18n';
+
+interface Props {
+	guide: Guide;
+}
+
+const { guide } = Astro.props;
+const g = guide.data;
+const lang: Lang = g.lang;
+const other: Lang = lang === 'es' ? 'en' : 'es';
+const c = t[lang].guides;
+const { Content, headings } = await render(guide);
+const toc = headings.filter((h) => h.depth === 2);
+const more = (await guides(lang)).filter((x) => x.id !== guide.id);
+
+const day = (d: Date) => new Intl.DateTimeFormat(lang, { dateStyle: 'long' }).format(d);
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+// The closing offer: the guide's platforms, and what they cost together.
+const platforms = PLATFORMS.filter((p) => g.platforms.includes(p.id));
+const names = new Intl.ListFormat(lang, { type: 'conjunction' }).format(platforms.map((p) => p.name));
+const price = platforms.reduce((sum, p) => sum + p.price, 0);
+// One platform: its own page, with its plan picked; several: the home page's pricing.
+const offer = `${path(lang, platforms.length === 1 ? platforms[0].slug : '')}#pricing`;
+
+const url = new URL(path(lang, guidePage(lang, g.slug)), Astro.site).href;
+const jsonLd = {
+	'@context': 'https://schema.org',
+	'@type': 'TechArticle',
+	headline: g.h1,
+	description: g.description,
+	inLanguage: lang,
+	url,
+	mainEntityOfPage: url,
+	datePublished: iso(g.published),
+	dateModified: iso(g.updated ?? g.published),
+	image: new URL(`/og-${lang}.png`, Astro.site).href,
+	author: { '@type': 'Organization', name: 'Lurk', url: new URL(path(lang), Astro.site).href },
+	publisher: { '@type': 'Organization', name: 'Lurk', url: new URL(path(lang), Astro.site).href },
+};
+---
+
+<Base lang={lang} title={g.title} description={g.description} page={guidePage(lang, g.slug)} otherPage={guidePage(other, g.translation)} current="guides" jsonLd={jsonLd}>
+	<article class="hero guide">
+		<div class="wrap">
+			<p class="crumbs"><a href={path(lang, GUIDES_PATH[lang])}>{t[lang].nav.guides}</a> /</p>
+			<h1>{g.h1}</h1>
+			<p class="muted dates">
+				{c.published} <time datetime={iso(g.published)}>{day(g.published)}</time>
+				{g.updated && <> · {c.updated} <time datetime={iso(g.updated)}>{day(g.updated)}</time></>}
+			</p>
+
+			{
+				toc.length > 2 && (
+					<nav class="toc" aria-label={c.toc}>
+						<p>{c.toc}</p>
+						<ol>{toc.map((h) => <li><a href={`#${h.slug}`}>{h.text}</a></li>)}</ol>
+					</nav>
+				)
+			}
+
+			<div class="prose">
+				<Content />
+			</div>
+
+			<aside class="offer">
+				<h2>{c.ctaHead}</h2>
+				<p>{c.cta(names, price)}</p>
+				<div class="actions">
+					<a class="btn" href={offer}>{t[lang].home.ctaPrimary} · {price}€{t[lang].pricing.month}</a>
+					<a class="btn ghost" href={path(lang, 'docs')}>{t[lang].home.ctaSecondary}</a>
+				</div>
+			</aside>
+
+			{
+				more.length > 0 && (
+					<nav class="more" aria-label={c.more}>
+						<h2>{c.more}</h2>
+						<ul>{more.map((x) => <li><a href={path(lang, guidePage(lang, x.data.slug))}>{x.data.h1}</a></li>)}</ul>
+					</nav>
+				)
+			}
+		</div>
+	</article>
+</Base>
+
+<style>
+	/* Lines short enough to read, aligned with the rest of the site. */
+	.guide .wrap > * {
+		max-width: 720px;
+	}
+	.crumbs {
+		font-size: 13px;
+		color: var(--dim);
+		margin-bottom: 12px;
+	}
+	.crumbs a {
+		color: var(--muted);
+		text-decoration: none;
+	}
+	.dates {
+		margin: 12px 0 32px;
+		font-size: 13px;
+	}
+
+	.toc {
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--bg-2);
+		padding: 14px 18px;
+		margin-bottom: 40px;
+		font-size: 14px;
+	}
+	.toc p {
+		color: var(--dim);
+		margin: 0 0 6px;
+		font-size: 13px;
+	}
+	.toc ol {
+		margin: 0;
+		padding-left: 3ch;
+		color: var(--dim);
+	}
+	.toc a {
+		color: var(--muted);
+		text-decoration: none;
+	}
+	.toc a:hover {
+		color: var(--accent);
+	}
+
+	.prose {
+		font-size: 15px;
+		line-height: 1.75;
+	}
+	.prose :global(h2) {
+		font-size: 19px;
+		color: var(--fg);
+		font-weight: 600;
+		margin: 56px 0 16px;
+		scroll-margin-top: 24px;
+	}
+	.prose :global(h3) {
+		font-size: 16px;
+		margin: 36px 0 10px;
+		scroll-margin-top: 24px;
+	}
+	.prose :global(h3::before) {
+		content: '### ';
+		color: var(--dim);
+	}
+	.prose :global(ul),
+	.prose :global(ol) {
+		margin: 0 0 1em;
+		padding-left: 3ch;
+	}
+	.prose :global(li) {
+		margin-bottom: 6px;
+	}
+	.prose :global(li::marker) {
+		color: var(--accent);
+	}
+	.prose :global(strong) {
+		color: var(--fg);
+		font-weight: 600;
+	}
+	.prose :global(a) {
+		color: var(--fg);
+		text-decoration: underline;
+		text-decoration-color: var(--dim);
+	}
+	.prose :global(a:hover) {
+		color: var(--accent);
+		text-decoration-color: var(--accent);
+	}
+	/* Inline code in the text, not the install line of the tabbed code. */
+	.prose :global(:is(p, li, td) > code) {
+		font-size: 0.9em;
+		color: var(--accent);
+		background: var(--bg-2);
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		padding: 1px 5px;
+		overflow-wrap: anywhere;
+	}
+	/* Fenced code blocks; the tabbed ones bring their own frame. */
+	.prose > :global(pre.astro-code) {
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--bg-2) !important;
+		margin: 0 0 1.4em;
+	}
+	.prose :global(.tabs) {
+		margin: 0 0 1.4em;
+	}
+	.prose :global(.tabs pre.astro-code) {
+		max-height: 640px;
+	}
+	.prose :global(blockquote) {
+		margin: 0 0 1.2em;
+		padding: 4px 0 4px 16px;
+		border-left: 2px solid var(--accent-dim);
+	}
+	.prose :global(blockquote p) {
+		margin: 0;
+		color: var(--muted);
+		font-size: 14px;
+	}
+	.prose :global(table) {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 14px;
+		margin: 0 0 1.4em;
+		display: block;
+		overflow-x: auto;
+	}
+	.prose :global(td),
+	.prose :global(th) {
+		border-bottom: 1px solid var(--line);
+		padding: 8px 16px 8px 0;
+		text-align: left;
+		vertical-align: top;
+	}
+	.prose :global(th) {
+		color: var(--muted);
+		font-weight: 500;
+	}
+
+	.offer {
+		margin-top: 64px;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--bg-2);
+		padding: 24px;
+	}
+	.offer h2 {
+		margin-bottom: 12px;
+	}
+	.offer p {
+		color: var(--muted);
+		font-size: 14px;
+	}
+	.offer .actions {
+		margin-bottom: 0;
+	}
+
+	.more {
+		margin-top: 56px;
+	}
+	.more ul {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+	}
+	.more li::before {
+		content: '> ';
+		color: var(--accent);
+	}
+</style>

@@ -1,0 +1,252 @@
+---
+lang: es
+slug: bot-telegram-vinted
+translation: vinted-telegram-bot
+title: 'Cómo crear un bot de Telegram para Vinted: alertas de artículos nuevos | Lurk'
+description: 'Crea un bot de Telegram que te avisa al momento de los artículos nuevos de Vinted que buscas, por marca, talla y precio. Código completo en Python y Node.js.'
+h1: Cómo crear un bot de Telegram que te avisa de lo nuevo en Vinted
+platforms: [vinted]
+published: 2026-11-18
+---
+
+import CodeTabs from '../../../components/CodeTabs.astro';
+import python from './bot.es.py?raw';
+import node from './bot.es.mjs?raw';
+
+En Vinted, un buen precio dura minutos: unas Dunk a 40 €, un abrigo de marca a 15 €… Cuando te llega el aviso de una búsqueda guardada, muchas veces ya está reservado. La única forma de llegar primero es enterarte en cuanto se publica.
+
+En esta guía montas un bot de Telegram que hace justo eso: te manda cada artículo nuevo de Vinted que cumple tus filtros, con foto, precio, talla, estado y un botón para abrirlo. Son unas 130 líneas en Python o Node.js, y puedes probarlo gratis antes de pagar nada.
+
+Lo que hace el bot:
+
+- Filtra por **palabras clave, marca, talla, precio máximo y país**.
+- Manda cada aviso **con foto** y un botón directo al artículo, en tu Vinted.
+- **No repite** artículos y aguanta los límites de Telegram.
+- **Se reconecta solo** si se corta la conexión, para dejarlo funcionando 24/7.
+
+## Cómo funciona
+
+Vinted no tiene una API pública para leer anuncios. Un bot que consulta la web una y otra vez acaba bloqueado: necesitas proxies, cookies, reintentos, y arreglarlo cada vez que Vinted cambia algo.
+
+Aquí el bot no consulta Vinted. Se conecta por WebSocket a [Lurk](/vinted-api/), que le manda cada artículo nuevo de Vinted en JSON en cuanto se publica. El bot solo tiene que hacer tres cosas:
+
+1. Leer los artículos que llegan.
+2. Quedarse con los que cumplen tus filtros.
+3. Mandarlos a tu chat de Telegram.
+
+## Lo que necesitas
+
+- Una cuenta de Telegram.
+- Python 3.10 o superior, o Node.js 18 o superior.
+- Para probarlo, nada más: el demo de Lurk es público. Para recibir todos los artículos, una API key de Lurk con Vinted.
+
+## 1. Crea el bot con BotFather
+
+Los bots de Telegram se crean desde otro bot, [@BotFather](https://t.me/BotFather):
+
+1. Abre @BotFather en Telegram y mándale `/newbot`.
+2. Elige un nombre (el que verás en el chat, como «Chollos Vinted») y un usuario que acabe en `bot`, como `mis_chollos_vinted_bot`.
+3. BotFather te contesta con el **token** del bot, algo como `7412345678:AAH3k…`. Guárdalo: es la contraseña del bot. Quien lo tenga puede escribir en su nombre.
+
+## 2. Consigue el chat_id
+
+El bot necesita saber a qué chat escribirte:
+
+1. Abre el chat con tu bot (el enlace te lo da BotFather) y mándale cualquier mensaje, por ejemplo `/start`.
+2. Abre en el navegador esta dirección, con tu token en lugar de `TOKEN`:
+
+```text
+https://api.telegram.org/botTOKEN/getUpdates
+```
+
+3. Busca `"chat":{"id":` en la respuesta. El número que sigue es tu **chat_id**, por ejemplo `123456789`.
+
+Si sale `"result":[]`, mándale otro mensaje al bot y recarga la página.
+
+> ¿Prefieres los avisos en un grupo? Añade el bot al grupo, escribe `/start` en él y repite el paso 2: el id de un grupo es negativo, como `-1001234567890`. Para un canal, añade el bot como administrador y publica algo en el canal.
+
+## 3. Mira lo que llega de Vinted
+
+Antes de escribir código, mira qué recibe el bot. El demo de Lurk es público y manda artículos reales de Vinted, uno por segundo. Si tienes Node.js, ejecuta:
+
+```bash
+npx wscat -c "wss://api.lurk.insomnis.dev/v1/demo?platforms=vinted&format=normalized"
+```
+
+Cada mensaje es un JSON con una lista de artículos en `items`. Con `format=normalized`, cada artículo trae estos campos (recortado):
+
+```json
+{
+  "id": "9876543210",
+  "title": "Chaqueta The North Face Nuptse 700",
+  "brand": "The North Face",
+  "price_in_cent": 8500,
+  "currency": "EUR",
+  "url": "https://www.vinted.fr/items/9876543210-chaqueta-the-north-face-nuptse-700",
+  "host_url": "www.vinted.fr",
+  "vinted_hosts": ["www.vinted.es", "www.vinted.fr", "www.vinted.it"],
+  "url_photo": ["https://images1.vinted.net/…/f800/….jpeg"],
+  "attributes": [
+    { "code": "size", "title": "Size", "value": "M / UK 12-14", "id": 207 },
+    { "code": "status", "title": "Condition", "value": "Very good", "id": 2 }
+  ],
+  "completeness": "Full"
+}
+```
+
+Lo que usa el bot:
+
+| Campo | Para qué |
+| --- | --- |
+| `title`, `brand` | Buscar tus palabras clave |
+| `price_in_cent` | El precio en céntimos: 8500 son 85 € |
+| `attributes` | La talla (`size`) y el estado (`status`) |
+| `vinted_hosts` | Los Vinted desde los que se puede comprar |
+| `url`, `url_photo` | El enlace y las fotos del aviso |
+
+Todos los campos están en la [documentación](/docs/).
+
+## 4. El código del bot
+
+El bot completo, listo para copiar. Elige Python o Node.js: hacen exactamente lo mismo.
+
+<CodeTabs
+	lang="es"
+	items={[
+		{ id: 'python', label: 'Python', lang: 'python', install: 'pip install websockets httpx', code: python },
+		{ id: 'node', label: 'Node.js', lang: 'javascript', install: 'npm install ws', code: node },
+	]}
+/>
+
+Guárdalo como `bot.py` o `bot.mjs`. Lo que tienes que cambiar está arriba del todo; el resto puedes dejarlo tal cual. Así funciona por dentro:
+
+### Tus filtros
+
+- `KEYWORDS`: el bot avisa si el título o la marca contienen **alguna** de las palabras, sin importar mayúsculas. Con `["nike dunk", "jordan 1"]` te llegan las dos cosas.
+- `MAX_PRICE`: el precio máximo en euros.
+- `SIZES`: las tallas que te valen. Vinted escribe las tallas de varias formas, como `M / UK 12-14`, `42` o `W32`, y el bot compara cada parte: con `"M"` te llega `M / UK 12-14`. Si no sabes cómo escribe Vinted una talla, deja `SIZES` vacío un rato y mira cómo sale en los avisos.
+- `VINTED_DOMAIN`: Vinted comparte artículos entre países, y `vinted_hosts` dice desde cuáles se puede comprar cada uno. Con `"www.vinted.es"` solo te llega lo que puedes comprar desde España, y el botón lo abre en vinted.es. Con `None` (`null` en Node.js) te llega todo.
+
+Una lista vacía quita ese filtro. Para cambiar el texto del aviso, edita `caption()`.
+
+### Sin avisos repetidos
+
+Un mismo artículo puede llegar dos veces: primero tal como sale en la búsqueda, y después con todos sus datos. El bot recuerda los últimos 10.000 artículos que te ha mandado y no repite ninguno.
+
+Si buscas por talla, no te pierdes nada: la primera copia a veces llega sin talla, así que no pasa el filtro y el bot espera a la completa.
+
+### Una cola entre Lurk y Telegram
+
+Telegram deja mandar más o menos un mensaje por segundo a un chat, y 20 por minuto a un grupo. Pero de Vinted llegan muchos más artículos por segundo, y Lurk corta la conexión si el bot se queda atrás leyéndolos.
+
+Por eso el bot lee de Lurk y escribe en Telegram por separado, con una cola entre los dos. Si Telegram pide esperar (error 429), el bot espera lo que le dice. Si se juntan más de 100 avisos pendientes, descarta los nuevos y te lo dice en la consola: es que tus filtros dejan pasar demasiado.
+
+### Reconexión
+
+Las conexiones se cortan a veces (un corte de red, un despliegue). El bot se reconecta solo, esperando 1 s, 2 s, 4 s… hasta 30 s entre intentos. Si tu API key no es válida, se para y te lo dice: reintentar no lo arreglaría.
+
+## 5. Pruébalo con el demo
+
+Pon tu token y tu chat_id y arranca el bot:
+
+<CodeTabs
+	lang="es"
+	items={[
+		{ id: 'python', label: 'Python', lang: 'bash', code: 'export TELEGRAM_TOKEN="7412345678:AAH3k..."\nexport TELEGRAM_CHAT_ID="123456789"\npython bot.py' },
+		{ id: 'node', label: 'Node.js', lang: 'bash', code: 'export TELEGRAM_TOKEN="7412345678:AAH3k..."\nexport TELEGRAM_CHAT_ID="123456789"\nnode bot.mjs' },
+	]}
+/>
+
+Sin `LURK_KEY`, el bot se conecta al demo. El demo manda un artículo por segundo de todo Vinted, así que con filtros muy concretos puede tardar en salir algo. Para probar, vacía `KEYWORDS` y `SIZES`: en unos segundos te empiezan a llegar avisos.
+
+En Windows, cambia `export` por `set` en la consola (cmd) o por `$env:TELEGRAM_TOKEN="..."` en PowerShell.
+
+## 6. Recibe todos los artículos
+
+Cuando veas que funciona, pon tus filtros de verdad y añade tu API key de Lurk:
+
+```bash
+export LURK_KEY="tu_api_key"
+```
+
+Con la key, el mismo código se conecta al feed completo: todos los artículos nuevos de Vinted, en cuanto se publican. No hay nada más que cambiar.
+
+## 7. Déjalo funcionando 24/7
+
+Un bot de alertas solo sirve si está siempre encendido. Lo más fácil es dejarlo en un servidor barato con Linux (cualquier VPS pequeño sobra) o en una Raspberry Pi, como servicio de systemd: arranca solo al encender y se reinicia si falla.
+
+Copia el bot a una carpeta, por ejemplo `/home/tu-usuario/vinted-bot`, con las dependencias instaladas. En Python, mejor en un entorno virtual:
+
+```bash
+cd /home/tu-usuario/vinted-bot
+python3 -m venv venv
+venv/bin/pip install websockets httpx
+```
+
+Guarda tus claves en un archivo `.env` en esa carpeta:
+
+```ini
+TELEGRAM_TOKEN=7412345678:AAH3k...
+TELEGRAM_CHAT_ID=123456789
+LURK_KEY=tu_api_key
+```
+
+Crea el servicio en `/etc/systemd/system/vinted-bot.service`:
+
+```ini
+[Unit]
+Description=Bot de Telegram para Vinted
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tu-usuario
+WorkingDirectory=/home/tu-usuario/vinted-bot
+EnvironmentFile=/home/tu-usuario/vinted-bot/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/tu-usuario/vinted-bot/venv/bin/python bot.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Con Node.js, cambia `ExecStart` por `/usr/bin/node bot.mjs`. Después, actívalo y mira lo que hace:
+
+```bash
+sudo systemctl enable --now vinted-bot
+journalctl -u vinted-bot -f
+```
+
+## Si algo no va
+
+| Mensaje | Qué pasa |
+| --- | --- |
+| `Telegram sendPhoto: Bad Request: chat not found` | El chat_id está mal, o no le has escrito antes al bot. |
+| `Telegram sendMessage: Forbidden: bot was blocked by the user` | Has bloqueado el bot en Telegram: desbloquéalo. |
+| `401` al conectar | La API key de Lurk no es válida o está revocada. |
+| `403` al conectar | Tu suscripción no incluye Vinted. |
+| `429` al conectar | Tu key ya tiene abiertas todas sus conexiones: cierra otro bot que la use. |
+| No llega nada | Con el demo y filtros concretos, es normal: vacía los filtros para probar. |
+
+## Ideas para mejorarlo
+
+- **Varias búsquedas, cada una a su chat**: convierte los filtros en una lista de búsquedas, cada una con su `chat_id`, y manda cada artículo a las búsquedas que cumple.
+- **Wallapop, Milanuncios y Todocolección**: pide `platforms=vinted,wallapop` en la URL. Con `format=normalized` los campos son los mismos en todas, así que los filtros sirven tal cual. Solo tienes que distinguir los repetidos por plataforma (`event["platform"]` más el id) y aplicar `VINTED_DOMAIN` solo a Vinted.
+- **Un canal para tus seguidores**: manda los avisos a un canal de Telegram y compártelo, o móntalo como servicio de alertas para otros.
+- **Historial de precios**: guarda los artículos que llegan en una base de datos para saber cuánto vale de verdad lo que buscas.
+
+## Preguntas frecuentes
+
+### ¿Vinted tiene API?
+
+No tiene una API pública para leer anuncios. Para enterarte de lo nuevo, o haces scraping de la web, con sus bloqueos, o usas un servicio que te lo da hecho, como Lurk.
+
+### ¿Cuánto cuesta?
+
+La API de bots de Telegram es gratis. El demo de Lurk también, pero solo manda un artículo por segundo. Para recibirlos todos necesitas la suscripción de Lurk con Vinted, sin permanencia.
+
+### ¿Puedo usarlo sin saber programar?
+
+Sí, si sabes copiar el código, cambiar los filtros de arriba y ejecutar un comando. Todo lo demás ya está hecho.
