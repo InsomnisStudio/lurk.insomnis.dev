@@ -1,0 +1,253 @@
+---
+lang: es
+slug: monitor-vinted-discord
+translation: vinted-discord-monitor
+title: 'Monitor de Vinted para Discord: cómo crear el tuyo con webhooks | Lurk'
+description: 'Crea un monitor de Vinted para Discord: cada artículo nuevo, filtrado por marca, talla y precio, en su canal y con mención al rol. Código completo en Python y Node.js.'
+h1: Cómo crear un monitor de Vinted para Discord
+platforms: [vinted]
+published: 2026-11-19
+---
+
+import { Code } from 'astro:components';
+import CodeTabs from '../../../components/CodeTabs.astro';
+import python from './monitor.es.py?raw';
+import node from './monitor.es.mjs?raw';
+import monitors from './monitors.es.json?raw';
+
+Los servidores de Discord de reventa viven de sus monitores: un canal para Nike Dunk, otro para marcas a menos de 15 €, otro para consolas… y en cada uno, un aviso en cuanto alguien publica algo que encaja. Quien llega primero se lo lleva.
+
+En esta guía montas ese monitor. Cada artículo nuevo de Vinted que cumple los filtros de un canal llega a ese canal con foto, precio, talla, estado, un botón para abrirlo y, si quieres, la mención a un rol. Son unas 160 líneas en Python o Node.js, todo se configura en un archivo JSON, y puedes probarlo gratis antes de pagar nada.
+
+Lo que hace el monitor:
+
+- **Un canal por búsqueda**, cada uno con sus filtros de palabras clave, marca, talla, precio máximo y país.
+- Avisos con **embed**: foto grande, campos de precio, talla, estado y marca, y un **botón** directo al artículo.
+- **Menciona un rol** en cada aviso, para que avise solo a quien sigue esa búsqueda.
+- **Tu marca**: el nombre y el avatar con los que escribe, por canal.
+- Respeta los **límites de Discord** canal a canal, y se para solo si borras un webhook.
+- **Se reconecta solo** si se corta la conexión, para dejarlo funcionando 24/7.
+
+## Cómo funciona
+
+Vinted no tiene una API pública para leer anuncios, y un scraper que la consulta sin parar acaba bloqueado: proxies, cookies, reintentos, y arreglarlo cada vez que Vinted cambia algo. Esa es la parte difícil de un monitor.
+
+Aquí el monitor no consulta Vinted. Se conecta por WebSocket a [Lurk](/vinted-api/), que le manda cada artículo nuevo de Vinted en JSON en cuanto se publica. Con una sola conexión recibe todos, y el monitor solo tiene que repartirlos:
+
+1. Lee cada artículo que llega.
+2. Lo compara con los filtros de cada canal.
+3. Lo manda a los canales que encaja, por **webhook**.
+
+Un webhook es una URL que da Discord para publicar en un canal. No hace falta crear un bot ni darle permisos: basta con hacer un `POST` a esa URL.
+
+## Lo que necesitas
+
+- Un servidor de Discord donde puedas gestionar webhooks.
+- Python 3.10 o superior, o Node.js 18 o superior.
+- Para probarlo, nada más: el demo de Lurk es público. Para recibir todos los artículos, una API key de Lurk con Vinted.
+
+## 1. Crea un webhook por canal
+
+Para cada canal donde quieras avisos:
+
+1. Abre los ajustes del canal (la rueda junto a su nombre) y entra en **Integraciones → Webhooks**.
+2. Pulsa **Nuevo webhook**. Ponle el nombre y el avatar que verán tus miembros, como «Chollos Vinted».
+3. Pulsa **Copiar URL del webhook**. Es algo como `https://discord.com/api/webhooks/1234567890/aBcDeF…`
+
+Trata esa URL como una contraseña: quien la tenga puede escribir en el canal.
+
+## 2. Un rol para las menciones (opcional)
+
+Si quieres que cada aviso notifique a quien sigue esa búsqueda:
+
+1. En **Ajustes del servidor → Roles**, crea un rol, como «Dunk».
+2. En sus permisos, activa **Permitir que cualquiera @mencione este rol**. Si no, la mención sale pero no avisa a nadie.
+3. Copia su ID. Activa antes el **Modo desarrollador** en **Ajustes de usuario → Avanzado**, y luego haz clic derecho en el rol → **Copiar ID del rol**.
+
+Tus miembros eligen qué roles quieren con la **Incorporación** del servidor o con cualquier bot de roles.
+
+## 3. Configura tus monitores
+
+Cada monitor es un canal con sus filtros. Van todos en un archivo `monitors.json`, junto al código:
+
+<Code code={monitors} lang="json" theme="vitesse-black" />
+
+| Campo | Qué hace |
+| --- | --- |
+| `name` | El nombre del monitor. Sale al pie de cada aviso y en la consola. |
+| `webhook` | La URL del webhook del canal. Es el único campo obligatorio, junto a `name`. |
+| `keywords` | Avisa si el título o la marca contienen **alguna** de estas palabras, sin importar mayúsculas. |
+| `max_price` | El precio máximo, en euros. |
+| `sizes` | Las tallas que valen. Vinted las escribe como `M / UK 12-14`, `42` o `W32`, y el monitor compara cada parte: `"M"` encaja con `M / UK 12-14`. |
+| `domain` | Vinted comparte artículos entre países. Con `"www.vinted.es"` solo llega lo que se puede comprar desde España, y el botón lo abre en vinted.es. |
+| `role` | El ID del rol que se menciona en cada aviso. |
+| `username`, `avatar_url` | El nombre y el avatar con los que escribe, si quieres otros que los del webhook. |
+| `platforms` | Las plataformas que sigue: `["vinted"]` si no dices nada. Ver [más abajo](#y-wallapop). |
+
+Un campo que no pones, o una lista vacía, es «cualquiera». Un mismo artículo llega a todos los canales cuyos filtros cumple.
+
+## 4. El código del monitor
+
+El monitor completo, listo para copiar. Elige Python o Node.js: hacen exactamente lo mismo.
+
+<CodeTabs
+	lang="es"
+	items={[
+		{ id: 'python', label: 'Python', lang: 'python', install: 'pip install websockets httpx', code: python },
+		{ id: 'node', label: 'Node.js', lang: 'javascript', install: 'npm install ws', code: node },
+	]}
+/>
+
+Guárdalo como `monitor.py` o `monitor.mjs`, en la misma carpeta que `monitors.json`. No tienes que tocar nada del código: todo se configura en el JSON. Así funciona por dentro.
+
+### El aviso
+
+Cada aviso es un mensaje con un **embed**:
+
+- El título del artículo, que enlaza a él.
+- Un campo para el precio, la talla, el estado y la marca, cuando el artículo los tiene.
+- La primera foto en grande.
+- El nombre del monitor y la plataforma al pie, con la hora.
+- El color de la plataforma en el borde.
+
+Debajo va un **botón** «Ver en Vinted». Por defecto, Discord quita los botones de los mensajes de webhook: el monitor los pide con `?with_components=true` en la URL, que permite botones de enlace, los que solo abren una URL. Si en algún caso el botón no se ve, el título del embed también abre el artículo. Si cambias el aviso, edita `message()`, sin pasar de los límites de Discord: 256 caracteres en el título, 25 campos y 6000 caracteres en todo el embed.
+
+La mención al rol va en el texto del mensaje, porque una mención dentro de un embed no avisa. El monitor dice en `allowed_mentions` que solo puede mencionar ese rol, así que un título con `@everyone` no molesta a nadie.
+
+### Los límites de Discord
+
+Discord limita cuántos mensajes puede mandar cada webhook, y te dice en cada respuesta cuántos te quedan (`X-RateLimit-Remaining`) y cuándo se renuevan (`X-RateLimit-Reset-After`). El monitor tiene **una cola por webhook**: cuando uno gasta sus mensajes, espera lo que le dice Discord sin frenar a los demás canales. Si aun así recibe un error 429, espera lo que pide `Retry-After` y repite.
+
+Cada envío lleva `?wait=true` para que Discord confirme el mensaje. Sin él, un mensaje que falla no da error y no te enterarías.
+
+Si un webhook da 404, porque lo has borrado o la URL está mal, ese monitor se para y te lo dice en la consola. Discord pide no seguir usando un webhook que da 404: si insistes, bloquea tus peticiones un tiempo.
+
+### Sin avisos repetidos
+
+Un mismo artículo puede llegar dos veces: primero tal como sale en la búsqueda, y después con todos sus datos. El monitor recuerda los últimos 50.000 avisos que ha mandado, canal a canal, y no repite ninguno. Si un canal filtra por talla, no se pierde nada: la primera copia a veces llega sin talla, así que no pasa el filtro y el monitor espera a la completa.
+
+### Una cola entre Lurk y Discord
+
+De Vinted llegan muchos más artículos por segundo de los que Discord deja publicar, y Lurk corta la conexión si el monitor se queda atrás leyéndolos. Por eso el monitor lee de Lurk y escribe en Discord por separado. Si un canal junta más de 100 avisos pendientes, descarta los nuevos y te lo dice: sus filtros dejan pasar demasiado.
+
+### Reconexión
+
+Las conexiones se cortan a veces (un corte de red, un despliegue). El monitor se reconecta solo, esperando 1 s, 2 s, 4 s… hasta 30 s entre intentos. Si tu API key no es válida, se para y te lo dice: reintentar no lo arreglaría.
+
+## 5. Pruébalo con el demo
+
+Sin `LURK_KEY`, el monitor se conecta al demo de Lurk, que manda un artículo por segundo de todo Vinted. Para probar, deja en `monitors.json` un monitor sin filtros, solo con `name` y `webhook`, y arráncalo:
+
+<CodeTabs
+	lang="es"
+	items={[
+		{ id: 'python', label: 'Python', lang: 'bash', code: 'python monitor.py' },
+		{ id: 'node', label: 'Node.js', lang: 'bash', code: 'node monitor.mjs' },
+	]}
+/>
+
+En unos segundos empiezan a llegar avisos al canal. Con filtros concretos el demo puede tardar en dar con algo, porque solo trae una muestra.
+
+## 6. Recibe todos los artículos
+
+Cuando veas que funciona, pon tus filtros de verdad y añade tu API key de Lurk:
+
+```bash
+export LURK_KEY="tu_api_key"
+```
+
+En Windows, `set LURK_KEY=tu_api_key` en cmd o `$env:LURK_KEY="tu_api_key"` en PowerShell. Con la key, el mismo código se conecta al feed completo: todos los artículos nuevos de Vinted, en cuanto se publican.
+
+## 7. Déjalo funcionando 24/7
+
+Un monitor solo sirve si está siempre encendido. Lo más fácil es un servidor pequeño con Linux (cualquier VPS barato sobra) con el monitor como servicio de systemd: arranca solo y se reinicia si falla.
+
+Copia el monitor y `monitors.json` a una carpeta, como `/home/tu-usuario/monitor`, e instala las dependencias. En Python, mejor en un entorno virtual:
+
+```bash
+cd /home/tu-usuario/monitor
+python3 -m venv venv
+venv/bin/pip install websockets httpx
+echo 'LURK_KEY=tu_api_key' > .env
+```
+
+Crea el servicio en `/etc/systemd/system/vinted-monitor.service`:
+
+```ini
+[Unit]
+Description=Monitor de Vinted para Discord
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tu-usuario
+WorkingDirectory=/home/tu-usuario/monitor
+EnvironmentFile=/home/tu-usuario/monitor/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/tu-usuario/monitor/venv/bin/python monitor.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Con Node.js, cambia `ExecStart` por `/usr/bin/node monitor.mjs`. Actívalo y mira lo que hace:
+
+```bash
+sudo systemctl enable --now vinted-monitor
+journalctl -u vinted-monitor -f
+```
+
+Cuando cambies `monitors.json`, reinícialo con `sudo systemctl restart vinted-monitor`.
+
+## Si vendes monitores
+
+Si tienes un servidor de pago, o montas monitores para los servidores de otros, la parte cara de mantener es la de conseguir los anuncios: los proxies, los bloqueos, las horas arreglando el scraper cada vez que Vinted cambia algo. Con Lurk esa parte ya está hecha, y lo que queda es lo que te diferencia: tus búsquedas, tus canales y tu comunidad.
+
+- **Una sola key para todo.** Un proceso y una conexión sirven a todos los canales que quieras, de uno o de muchos servidores: cada monitor es una línea en `monitors.json` con su webhook.
+- **Un cliente nuevo es un webhook nuevo.** Te pasa la URL de su canal, la añades con sus filtros y reinicias.
+- **Tu marca en cada servidor.** Con `username` y `avatar_url` cada canal puede escribir con el nombre y el logo que quiera su dueño.
+- **Puedes cobrar por tus avisos.** Las [condiciones de Lurk](/terminos/) permiten reenviar los anuncios a tus usuarios, como hace un monitor de pago. Lo que no puedes es compartir la key ni revender el acceso a la API: tus clientes reciben avisos, no tu key.
+
+## Y Wallapop
+
+El monitor ya sabe leer las otras plataformas. Añade `"platforms": ["vinted", "wallapop"]` a un monitor y le llegan los dos: con `format=normalized` los campos son los mismos en todas, así que sus filtros sirven tal cual (`domain` solo se aplica a Vinted). El monitor se suscribe solo a las plataformas que usan tus monitores. Valen `vinted`, `wallapop`, `milanuncios` y `todocoleccion`, y tu suscripción de Lurk tiene que incluirlas.
+
+## Si algo no va
+
+| Mensaje o síntoma | Qué pasa |
+| --- | --- |
+| `El webhook no existe o su URL está mal` | El webhook se ha borrado o la URL está mal copiada. Ese monitor se para; los demás siguen. |
+| `Discord 400: …` | Discord rechaza el mensaje: si has cambiado `message()`, revisa los límites del embed. |
+| La mención sale pero no avisa | El rol no tiene activado «Permitir que cualquiera @mencione este rol». |
+| `401` al conectar | La API key de Lurk no es válida o está revocada. |
+| `403` al conectar | Tu suscripción no incluye una de las plataformas de tus monitores. |
+| `429` al conectar | Tu key ya tiene abiertas todas sus conexiones: cierra otro proceso que la use. |
+| `Demasiados avisos para Discord` | Los filtros de ese monitor dejan pasar más de lo que Discord publica. Afínalos. |
+| No llega nada | Con el demo y filtros concretos, es normal: prueba con un monitor sin filtros. |
+
+## Ideas para mejorarlo
+
+- **Comandos para tus miembros**: con un bot de verdad ([discord.py](https://discordpy.readthedocs.io/) o [discord.js](https://discord.js.org/)) tus miembros pueden crear sus propias alertas con un comando como `/alerta nike dunk 42 80`, y que el monitor les avise por mensaje privado.
+- **Foros**: si el canal es un foro, Discord pide crear un hilo por mensaje (`thread_name` en el cuerpo) o mandar a uno existente (`?thread_id=` en la URL del webhook).
+- **Recargar sin reiniciar**: vuelve a leer `monitors.json` cuando cambie, para añadir clientes sin cortar a los demás.
+- **Historial de precios**: guarda los artículos que llegan en una base de datos y avisa solo de lo que está por debajo del precio medio.
+
+## Preguntas frecuentes
+
+### ¿Webhook o bot de Discord?
+
+Para publicar avisos, un webhook basta y es más sencillo: no hay bot que crear, ni token, ni permisos. Un bot hace falta si quieres que tus miembros interactúen, con comandos o botones que hagan algo más que abrir un enlace.
+
+### ¿Cuántos canales puedo tener?
+
+Los que quieras. El monitor usa una sola conexión con Lurk para todos, y cada webhook tiene su propia cola y su propio límite de Discord.
+
+### ¿Vinted tiene API?
+
+No tiene una API pública para leer anuncios. Para enterarte de lo nuevo, o haces scraping de la web, con sus bloqueos, o usas un servicio que te lo da hecho, como Lurk.
+
+### ¿Lo quieres en Telegram?
+
+Está en otra guía: [cómo crear un bot de Telegram que te avisa de lo nuevo en Vinted](/guias/bot-telegram-vinted/).

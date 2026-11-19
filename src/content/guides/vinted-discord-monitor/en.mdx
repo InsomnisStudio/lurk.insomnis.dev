@@ -1,0 +1,253 @@
+---
+lang: en
+slug: vinted-discord-monitor
+translation: monitor-vinted-discord
+title: 'Vinted monitor for Discord: build your own with webhooks | Lurk'
+description: 'Build a Vinted monitor for Discord: every new item, filtered by brand, size and price, in its own channel with a role ping. Full code in Python and Node.js.'
+h1: How to build a Vinted monitor for Discord
+platforms: [vinted]
+published: 2026-11-19
+---
+
+import { Code } from 'astro:components';
+import CodeTabs from '../../../components/CodeTabs.astro';
+import python from './monitor.en.py?raw';
+import node from './monitor.en.mjs?raw';
+import monitors from './monitors.en.json?raw';
+
+Reselling Discord servers live off their monitors: a channel for Nike Dunks, another for brands under €15, another for consoles… and in each one, an alert the moment someone lists something that fits. Whoever gets there first gets it.
+
+In this guide you build that monitor. Every new Vinted item that matches a channel's filters lands in that channel with its photo, price, size, condition, a button to open it and, if you like, a role ping. It is about 160 lines of Python or Node.js, everything is set up in one JSON file, and you can try it for free before paying anything.
+
+What the monitor does:
+
+- **One channel per search**, each with its own filters for keywords, brand, size, maximum price and country.
+- Alerts as an **embed**: a large photo, fields for price, size, condition and brand, and a **button** straight to the item.
+- **Pings a role** with each alert, so only those following that search are notified.
+- **Your brand**: the name and avatar it posts as, per channel.
+- Stays within **Discord's limits** channel by channel, and stops by itself if you delete a webhook.
+- **Reconnects by itself** when the connection drops, so you can leave it running 24/7.
+
+## How it works
+
+Vinted has no public API for reading listings, and a scraper that polls it nonstop ends up blocked: proxies, cookies, retries, and fixing it every time Vinted changes something. That is the hard part of a monitor.
+
+Here the monitor does not poll Vinted. It connects over WebSocket to [Lurk](/en/vinted-api/), which sends it every new Vinted item as JSON the moment it is listed. One connection brings them all, and the monitor only has to hand them out:
+
+1. Read each item as it arrives.
+2. Check it against each channel's filters.
+3. Send it to the channels it matches, by **webhook**.
+
+A webhook is a URL Discord gives you for posting to a channel. No bot to create, no permissions to grant: a `POST` to that URL is enough.
+
+## What you need
+
+- A Discord server where you can manage webhooks.
+- Python 3.10 or newer, or Node.js 18 or newer.
+- To try it, nothing else: Lurk's demo is public. To get every item, a Lurk API key with Vinted.
+
+## 1. Create a webhook per channel
+
+For each channel that should get alerts:
+
+1. Open the channel's settings (the cog next to its name) and go to **Integrations → Webhooks**.
+2. Click **New Webhook**. Give it the name and avatar your members will see, such as "Vinted Deals".
+3. Click **Copy Webhook URL**. It looks like `https://discord.com/api/webhooks/1234567890/aBcDeF…`
+
+Treat that URL like a password: whoever has it can post in the channel.
+
+## 2. A role for pings (optional)
+
+If you want each alert to notify those following that search:
+
+1. In **Server Settings → Roles**, create a role, such as "Dunk".
+2. In its permissions, turn on **Allow anyone to @mention this role**. Otherwise the mention shows but notifies nobody.
+3. Copy its ID. First turn on **Developer Mode** in **User Settings → Advanced**, then right-click the role → **Copy Role ID**.
+
+Your members pick the roles they want with the server's **Onboarding** or any role bot.
+
+## 3. Set up your monitors
+
+Each monitor is a channel with its filters. They all go in a `monitors.json` file next to the code:
+
+<Code code={monitors} lang="json" theme="vitesse-black" />
+
+| Field | What it does |
+| --- | --- |
+| `name` | The monitor's name. Shown at the foot of each alert and in the console. |
+| `webhook` | The channel's webhook URL. The only required field besides `name`. |
+| `keywords` | Alerts when the title or brand contains **any** of these words, ignoring case. |
+| `max_price` | The maximum price, in euros. |
+| `sizes` | The sizes that fit. Vinted writes them as `M / UK 12-14`, `42` or `W32`, and the monitor checks each part: `"M"` matches `M / UK 12-14`. |
+| `domain` | Vinted shares items between countries. With `"www.vinted.de"` only what can be bought in Germany comes through, and the button opens it on vinted.de. |
+| `role` | The ID of the role pinged with each alert. |
+| `username`, `avatar_url` | The name and avatar it posts as, if not the webhook's own. |
+| `platforms` | The platforms it follows: `["vinted"]` unless you say otherwise. See [below](#and-wallapop). |
+
+A field you leave out, or an empty list, means "any". The same item goes to every channel whose filters it matches.
+
+## 4. The monitor's code
+
+The full monitor, ready to copy. Pick Python or Node.js: they do exactly the same.
+
+<CodeTabs
+	lang="en"
+	items={[
+		{ id: 'python', label: 'Python', lang: 'python', install: 'pip install websockets httpx', code: python },
+		{ id: 'node', label: 'Node.js', lang: 'javascript', install: 'npm install ws', code: node },
+	]}
+/>
+
+Save it as `monitor.py` or `monitor.mjs`, in the same folder as `monitors.json`. You do not need to touch the code: everything is set up in the JSON. Here is how it works inside.
+
+### The alert
+
+Each alert is a message with an **embed**:
+
+- The item's title, linking to it.
+- A field for the price, size, condition and brand, when the item has them.
+- The first photo, large.
+- The monitor's name and the platform at the foot, with the time.
+- The platform's colour on the edge.
+
+Below it goes a **"View on Vinted" button**. By default, Discord drops buttons from webhook messages: the monitor asks for them with `?with_components=true` in the URL, which allows link buttons, the ones that only open a URL. If the button ever does not show, the embed's title opens the item too. If you change the alert, edit `message()`, within Discord's limits: 256 characters in the title, 25 fields and 6000 characters across the embed.
+
+The role ping goes in the message text, because a mention inside an embed notifies nobody. The monitor says in `allowed_mentions` that it may only mention that role, so a title with `@everyone` in it bothers no one.
+
+### Discord's limits
+
+Discord limits how many messages each webhook can send, and tells you in every response how many you have left (`X-RateLimit-Remaining`) and when they refill (`X-RateLimit-Reset-After`). The monitor keeps **one queue per webhook**: when one runs out, it waits as long as Discord says without holding up the other channels. If it still gets a 429 error, it waits as long as `Retry-After` asks and tries again.
+
+Every send carries `?wait=true` so Discord confirms the message. Without it, a message that fails returns no error and you would never know.
+
+If a webhook returns 404, because you deleted it or the URL is wrong, that monitor stops and tells you in the console. Discord asks you not to keep using a webhook that returns 404: if you insist, it blocks your requests for a while.
+
+### No repeated alerts
+
+The same item can arrive twice: first as it shows in search results, then with all its details. The monitor remembers the last 50,000 alerts it sent, channel by channel, and never repeats one. If a channel filters by size, nothing is missed: the first copy sometimes comes without a size, so it does not pass the filter and the monitor waits for the full one.
+
+### A queue between Lurk and Discord
+
+Far more items arrive from Vinted every second than Discord lets you post, and Lurk drops the connection when the monitor falls behind reading them. That is why the monitor reads from Lurk and writes to Discord separately. If a channel piles up more than 100 pending alerts, it drops the new ones and tells you: its filters let too much through.
+
+### Reconnecting
+
+Connections drop now and then (a network blip, a deploy). The monitor reconnects by itself, waiting 1 s, 2 s, 4 s… up to 30 s between tries. If your API key is not valid, it stops and tells you: retrying would not fix it.
+
+## 5. Try it with the demo
+
+Without `LURK_KEY`, the monitor connects to Lurk's demo, which sends one item a second from all of Vinted. To test, leave a monitor with no filters in `monitors.json`, just `name` and `webhook`, and start it:
+
+<CodeTabs
+	lang="en"
+	items={[
+		{ id: 'python', label: 'Python', lang: 'bash', code: 'python monitor.py' },
+		{ id: 'node', label: 'Node.js', lang: 'bash', code: 'node monitor.mjs' },
+	]}
+/>
+
+Alerts start arriving in the channel within seconds. With narrow filters the demo can take a while to find anything, since it only brings a sample.
+
+## 6. Get every item
+
+Once you see it working, set your real filters and add your Lurk API key:
+
+```bash
+export LURK_KEY="your_api_key"
+```
+
+On Windows, `set LURK_KEY=your_api_key` in cmd or `$env:LURK_KEY="your_api_key"` in PowerShell. With the key, the same code connects to the full feed: every new Vinted item, the moment it is listed.
+
+## 7. Keep it running 24/7
+
+A monitor is only useful if it is always on. The easiest way is a small Linux server (any cheap VPS is plenty) running the monitor as a systemd service: it starts by itself and restarts if it fails.
+
+Copy the monitor and `monitors.json` to a folder, such as `/home/your-user/monitor`, and install the dependencies. For Python, use a virtual environment:
+
+```bash
+cd /home/your-user/monitor
+python3 -m venv venv
+venv/bin/pip install websockets httpx
+echo 'LURK_KEY=your_api_key' > .env
+```
+
+Create the service at `/etc/systemd/system/vinted-monitor.service`:
+
+```ini
+[Unit]
+Description=Vinted monitor for Discord
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=your-user
+WorkingDirectory=/home/your-user/monitor
+EnvironmentFile=/home/your-user/monitor/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/your-user/monitor/venv/bin/python monitor.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+For Node.js, change `ExecStart` to `/usr/bin/node monitor.mjs`. Enable it and watch what it does:
+
+```bash
+sudo systemctl enable --now vinted-monitor
+journalctl -u vinted-monitor -f
+```
+
+When you change `monitors.json`, restart it with `sudo systemctl restart vinted-monitor`.
+
+## If you sell monitors
+
+If you run a paid server, or build monitors for other people's servers, the expensive part to maintain is getting the listings: the proxies, the blocks, the hours fixing the scraper every time Vinted changes something. With Lurk that part is done, and what is left is what sets you apart: your searches, your channels and your community.
+
+- **One key for everything.** One process and one connection serve as many channels as you like, on one server or many: each monitor is a line in `monitors.json` with its webhook.
+- **A new customer is a new webhook.** They send you their channel's URL, you add it with its filters and restart.
+- **Your brand on every server.** With `username` and `avatar_url` each channel can post with the name and logo its owner wants.
+- **You can charge for your alerts.** Lurk's [terms](/en/terms/) let you forward the listings to your users, as a paid monitor does. What you cannot do is share the key or resell access to the API: your customers get alerts, not your key.
+
+## And Wallapop
+
+The monitor already reads the other platforms. Add `"platforms": ["vinted", "wallapop"]` to a monitor and it gets both: with `format=normalized` the fields are the same on every platform, so its filters work as they are (`domain` only applies to Vinted). The monitor subscribes only to the platforms your monitors use. Valid ones are `vinted`, `wallapop`, `milanuncios` and `todocoleccion`, and your Lurk subscription must include them.
+
+## Troubleshooting
+
+| Message or symptom | What is wrong |
+| --- | --- |
+| `The webhook does not exist or its URL is wrong` | The webhook was deleted or its URL was copied wrong. That monitor stops; the rest carry on. |
+| `Discord 400: …` | Discord rejects the message: if you changed `message()`, check the embed limits. |
+| The mention shows but notifies nobody | The role does not have "Allow anyone to @mention this role" turned on. |
+| `401` when connecting | The Lurk API key is not valid, or it was revoked. |
+| `403` when connecting | Your subscription does not include one of your monitors' platforms. |
+| `429` when connecting | Your key already has all its connections open: stop another process using it. |
+| `Too many alerts for Discord` | That monitor's filters let through more than Discord will post. Narrow them. |
+| Nothing arrives | With the demo and narrow filters, that is normal: try a monitor with no filters. |
+
+## Ideas to take it further
+
+- **Commands for your members**: with a real bot ([discord.py](https://discordpy.readthedocs.io/) or [discord.js](https://discord.js.org/)) your members can create their own alerts with a command like `/alert nike dunk 42 80`, and get them by direct message.
+- **Forums**: if the channel is a forum, Discord needs a thread per message (`thread_name` in the body) or an existing one to post to (`?thread_id=` in the webhook URL).
+- **Reload without restarting**: read `monitors.json` again when it changes, so you can add customers without cutting off the rest.
+- **Price history**: save the items as they arrive in a database and alert only on what is below the average price.
+
+## FAQ
+
+### Webhook or Discord bot?
+
+For posting alerts, a webhook is enough and simpler: no bot to create, no token, no permissions. You need a bot when your members should interact, with commands or buttons that do more than open a link.
+
+### How many channels can I have?
+
+As many as you like. The monitor uses a single connection to Lurk for all of them, and each webhook has its own queue and its own Discord limit.
+
+### Does Vinted have an API?
+
+Not a public one for reading listings. To hear about new items you either scrape the website, blocks and all, or use a service that does it for you, such as Lurk.
+
+### Rather have it on Telegram?
+
+That is another guide: [how to build a Telegram bot that alerts you to new Vinted items](/en/guides/vinted-telegram-bot/).

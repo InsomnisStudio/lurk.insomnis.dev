@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Nike Dunk",
+    "webhook": "https://discord.com/api/webhooks/1234567890/aBcDeF...",
+    "keywords": ["nike dunk", "sb dunk"],
+    "max_price": 80,
+    "sizes": ["42", "43"],
+    "domain": "www.vinted.es",
+    "role": "123456789012345678",
+    "username": "Chollos Vinted",
+    "avatar_url": "https://example.com/logo.png"
+  },
+  {
+    "name": "Marcas a menos de 15 €",
+    "webhook": "https://discord.com/api/webhooks/2345678901/gHiJkL...",
+    "keywords": ["ralph lauren", "carhartt", "stone island"],
+    "max_price": 15,
+    "domain": "www.vinted.es"
+  }
+]
