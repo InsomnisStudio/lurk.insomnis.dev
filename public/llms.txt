@@ -1,0 +1,51 @@
+# Lurk API
+
+> Lurk is a real-time listings API for European second-hand marketplaces: Vinted, Wallapop, Milanuncios and Todocolección. It pushes every new listing over a WebSocket, as JSON, the moment it is published. Developers use it to build deal bots, resale monitors, Telegram or Discord alerts and price trackers without running scrapers, proxies or anti-bot workarounds.
+
+Lurk (lurk.insomnis.dev) is an independent service. It is not affiliated with or endorsed by Vinted, Wallapop, Milanuncios or Todocolección, none of which offer a public API for reading new listings from other sellers.
+
+## How it works
+
+- Endpoint: `wss://api.lurk.insomnis.dev/v1/feed`
+- Auth: `Authorization: Bearer <API key>` header, or `?key=` when the client cannot set headers.
+- `?platforms=vinted,wallapop,milanuncios,todocoleccion` picks the platforms (default: every platform in the subscription).
+- `?format=raw` (default) sends each listing exactly as its platform provides it; `?format=normalized` sends the main fields with the same shape on every platform (id, title, description, price_in_cent, currency, brand, url, url_photo, shipping, location, attributes such as size and condition, category, user_id, completeness).
+- One JSON event per new listing: `{format, platform, source, items}`. Push-based streaming, not polling.
+- Every new listing is delivered, with no event limits or quotas. Filtering by keyword, brand, size or price happens in your own code.
+- Not a search or history API: it is a stream of new listings. Store them yourself if you need history.
+- Free public demo, no key: `wss://api.lurk.insomnis.dev/v1/demo` sends real listings in real time, one per second per platform.
+- Example clients in Python, Node.js and Rust in the docs.
+
+## Pricing (per month, before VAT, no commitment)
+
+- Vinted: €49
+- Wallapop: €39
+- Milanuncios: €19
+- Todocolección: €19
+- Pay only for the platforms you pick; add or remove them any time with the same key. 3 simultaneous connections per key. Reselling the events to your own users (for example a paid alert bot) is allowed.
+
+## Docs and guides
+
+- [Docs](https://lurk.insomnis.dev/en/docs/): connection, parameters, event format, errors, reconnection.
+- [Vinted API](https://lurk.insomnis.dev/en/vinted-api/)
+- [Wallapop API](https://lurk.insomnis.dev/en/wallapop-api/)
+- [Milanuncios API](https://lurk.insomnis.dev/en/milanuncios-api/)
+- [Todocolección API](https://lurk.insomnis.dev/en/todocoleccion-api/)
+- [Vinted and Wallapop API alternatives compared](https://lurk.insomnis.dev/en/guides/vinted-wallapop-api-alternatives/)
+- [Build a Vinted Telegram bot](https://lurk.insomnis.dev/en/guides/vinted-telegram-bot/)
+- [Build a Vinted monitor for Discord](https://lurk.insomnis.dev/en/guides/vinted-discord-monitor/)
+
+## Español
+
+Lurk es una API en tiempo real que manda por WebSocket cada anuncio nuevo de Vinted, Wallapop, Milanuncios y Todocolección en cuanto se publica. Sirve para crear bots de chollos, monitores de reventa y alertas sin scrapers ni proxies. Desde 19 €/mes por plataforma, con demo gratuita sin key.
+
+- [Inicio](https://lurk.insomnis.dev/)
+- [Docs](https://lurk.insomnis.dev/docs/)
+- [API de Vinted](https://lurk.insomnis.dev/vinted-api/) · [API de Wallapop](https://lurk.insomnis.dev/wallapop-api/) · [API de Milanuncios](https://lurk.insomnis.dev/milanuncios-api/) · [API de Todocolección](https://lurk.insomnis.dev/todocoleccion-api/)
+- [Alternativas a una API de Vinted y Wallapop](https://lurk.insomnis.dev/guias/alternativas-api-vinted-wallapop/)
+- [Bot de Telegram para Vinted](https://lurk.insomnis.dev/guias/bot-telegram-vinted/)
+- [Monitor de Vinted para Discord](https://lurk.insomnis.dev/guias/monitor-vinted-discord/)
+
+## Contact
+
+insomnisdev@gmail.com

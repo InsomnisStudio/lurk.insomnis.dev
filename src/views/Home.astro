@@ -16,16 +16,35 @@ const c = t[lang];
 const fromPrice = Math.min(...PLATFORMS.map((p) => p.price));
 const platformList = new Intl.ListFormat(lang, { type: 'conjunction' }).format(PLATFORMS.map((p) => p.name));
 
+// "Lurk" alone is also lurk.org and others: name the entity as the API it is.
+const organization = new URL('/#organization', Astro.site).href;
 const jsonLd = {
 	'@context': 'https://schema.org',
 	'@graph': [
 		{
-			'@type': 'WebAPI',
+			'@type': 'Organization',
+			'@id': organization,
 			name: 'Lurk',
+			alternateName: 'Lurk API',
+			url: new URL('/', Astro.site).href,
+			logo: new URL('/favicon.svg', Astro.site).href,
+			email: CONTACT_EMAIL,
+		},
+		{
+			'@type': 'WebSite',
+			name: 'Lurk',
+			url: new URL('/', Astro.site).href,
+			inLanguage: ['es', 'en'],
+			publisher: { '@id': organization },
+		},
+		{
+			'@type': 'WebAPI',
+			name: 'Lurk API',
+			alternateName: 'Lurk: real-time listings API for Vinted, Wallapop, Milanuncios and Todocolección',
 			description: c.home.description,
 			url: new URL(path(lang), Astro.site).href,
 			documentation: new URL(path(lang, 'docs'), Astro.site).href,
-			provider: { '@type': 'Organization', name: 'Lurk', email: CONTACT_EMAIL },
+			provider: { '@id': organization },
 			offers: PLATFORMS.map((p) => ({ '@type': 'Offer', name: `${p.name} API`, price: p.price, priceCurrency: 'EUR' })),
 		},
 		{

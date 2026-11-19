@@ -1,0 +1,83 @@
+---
+lang: en
+slug: vinted-wallapop-api-alternatives
+translation: alternativas-api-vinted-wallapop
+title: 'Is there a Vinted or Wallapop API? Alternatives for new listings | Lurk'
+description: 'Vinted has no public API and Wallapop’s is for professional sellers. We compare the alternatives for getting new listings: your own scraper, Apify scrapers and a real-time WebSocket feed.'
+h1: Is there a Vinted or Wallapop API? Alternatives for getting new listings
+platforms: [vinted, wallapop]
+published: 2026-11-19
+---
+
+If you want to build a deal bot, a resale monitor or your own alerts, the first thing you look for is a Vinted or Wallapop API that gives you new listings. The catch is that neither offers one.
+
+This guide sums up the options that actually exist, what each costs and when it makes sense. We write it as Lurk, which is one of them; we try to describe the others fairly.
+
+## At a glance
+
+| | Your own scraper | Apify scrapers and similar | Lurk |
+| --- | --- | --- | --- |
+| How listings arrive | You query the site every few seconds | Scheduled runs (polling) | Pushed over WebSocket as soon as they are published |
+| Maintenance | Yours: proxies, cookies, bans, site changes | The actor’s author | None |
+| Price | Server and proxies | Per result or per run | Flat rate per platform, from €19/month |
+| Platforms | Whatever you build | Usually one actor per platform | Vinted, Wallapop, Milanuncios and Todocolección on one connection |
+| Search and history | Yes, if you build it | Yes | No: new listings only |
+
+## What Vinted and Wallapop offer
+
+**Vinted** has no public API for reading listings. Bots use the internal API behind its website, which is protected against bots and changes without notice.
+
+**Wallapop** has an official API, Wallapop Connect, but it is meant for professional sellers and integrators: publishing items, managing sales and receiving events about *your own* account. It does not tell you what other people list.
+
+So, to get new listings from other sellers, these are the three options.
+
+## Option 1: your own scraper
+
+You write a program that queries Vinted’s or Wallapop’s search over and over and keeps what is new.
+
+**Pros:** full control, and you can search and keep history.
+
+**Cons:** this is where the time goes. Vinted and Wallapop detect and block automated traffic, so you end up needing residential proxies, cookie handling and retries. Every site change breaks it. And the faster you want to know, the more requests you make and the sooner you get banned.
+
+## Option 2: Apify scrapers and similar services
+
+Apify, and services such as ScrapingBee, have ready-made Vinted and Wallapop scrapers. You start a run with your search and get the listings back as JSON. Some have a monitor mode that only returns new items.
+
+**Pros:** you don’t maintain the scraper, and they work well for one-off searches and for historical or market data.
+
+**Cons:** they work through scheduled runs, so you learn about a new listing on the next run, not the moment it goes live. You usually pay per result or per compute time, and the bill grows the more often you run. Each actor has a different author, data format and maintenance pace.
+
+## Option 3: Lurk, a real-time WebSocket feed
+
+[Lurk](/en/) is not a scraper you run: it is a stream. You open a WebSocket and get one JSON event for every new listing on [Vinted](/en/vinted-api/), [Wallapop](/en/wallapop-api/), [Milanuncios](/en/milanuncios-api/) or [Todocolección](/en/todocoleccion-api/) as soon as it is published.
+
+- **Real-time push:** you don’t poll anything; listings just arrive.
+- **Every new listing, no quotas:** a flat rate per platform, no per-result billing.
+- **One connection for everything:** pick platforms with `?platforms=` and, with `?format=normalized`, the main fields have the same shape on every platform.
+- **Full data:** title, description, price, photos, location, shipping, seller and each platform’s extras, such as size and condition on Vinted.
+- **Public demo, no key:** real listings, one per second per platform, to try before paying.
+
+**Cons:** there is no search or history; if you need them, store the listings as they arrive. It doesn’t filter on the server either: you get everything new and filter in your code. It costs €49/month for Vinted, €39 for Wallapop and €19 for Milanuncios or Todocolección (+ VAT, cancel any time).
+
+```python
+import asyncio, json, websockets
+
+async def main():
+    async with websockets.connect("wss://api.lurk.insomnis.dev/v1/demo?format=normalized") as ws:
+        async for message in ws:
+            event = json.loads(message)
+            for item in event["items"]:
+                print(event["platform"], item["title"], item["price_in_cent"] / 100)
+
+asyncio.run(main())
+```
+
+Connection details, event format and errors are in the [docs](/en/docs/).
+
+## Which one fits?
+
+- **You need search or price history:** an Apify scraper or your own.
+- **One search, no rush:** an Apify actor run now and then is cheap.
+- **A bot, monitor or alert service that has to be first:** a real-time feed like Lurk saves you the scraping and the bans.
+
+If you are building one, there is full code for a [Vinted Telegram bot](/en/guides/vinted-telegram-bot/) and a [Vinted monitor for Discord](/en/guides/vinted-discord-monitor/).
